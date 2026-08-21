@@ -1,13 +1,22 @@
 package com.example
 
+import android.graphics.PixelFormat
+import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.*
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -22,6 +31,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        configureHighRefreshRate()
+
         setContent {
             val settingsViewModel: SettingsViewModel = viewModel()
             val themeMode by settingsViewModel.themeMode.collectAsStateWithLifecycle()
@@ -37,6 +48,37 @@ class MainActivity : ComponentActivity() {
                     CarromAppNavigation(settingsViewModel = settingsViewModel)
                 }
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        configureHighRefreshRate()
+    }
+
+    /**
+     * Unlocks 120Hz / highest available display refresh rate for buttery-smooth animations and input.
+     */
+    private fun configureHighRefreshRate() {
+        try {
+            window.setFormat(PixelFormat.RGBA_8888)
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                val display = display
+                val modes = display?.supportedModes
+                val maxMode = modes?.maxByOrNull { it.refreshRate }
+                if (maxMode != null && maxMode.refreshRate >= 90f) {
+                    val params = window.attributes
+                    params.preferredDisplayModeId = maxMode.modeId
+                    window.attributes = params
+                }
+            } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val params = window.attributes
+                params.preferredRefreshRate = 120f
+                window.attributes = params
+            }
+        } catch (_: Exception) {
+            // Graceful fallback on devices without display mode switching
         }
     }
 }
@@ -75,7 +117,35 @@ fun CarromAppNavigation(
 
     NavHost(
         navController = navController,
-        startDestination = Destinations.HOME
+        startDestination = Destinations.HOME,
+        enterTransition = {
+            fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing)) +
+            slideIntoContainer(
+                AnimatedContentTransitionScope.SlideDirection.Start,
+                animationSpec = tween(220, easing = FastOutSlowInEasing)
+            )
+        },
+        exitTransition = {
+            fadeOut(animationSpec = tween(180, easing = FastOutSlowInEasing)) +
+            slideOutOfContainer(
+                AnimatedContentTransitionScope.SlideDirection.Start,
+                animationSpec = tween(180, easing = FastOutSlowInEasing)
+            )
+        },
+        popEnterTransition = {
+            fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing)) +
+            slideIntoContainer(
+                AnimatedContentTransitionScope.SlideDirection.End,
+                animationSpec = tween(220, easing = FastOutSlowInEasing)
+            )
+        },
+        popExitTransition = {
+            fadeOut(animationSpec = tween(180, easing = FastOutSlowInEasing)) +
+            slideOutOfContainer(
+                AnimatedContentTransitionScope.SlideDirection.End,
+                animationSpec = tween(180, easing = FastOutSlowInEasing)
+            )
+        }
     ) {
         // HOME SCREEN
         composable(Destinations.HOME) {
@@ -171,10 +241,11 @@ fun CarromAppNavigation(
                     }
                 )
             } else {
-                LaunchedEffect(Unit) {
-                    navController.navigate(Destinations.HOME) {
-                        popUpTo(Destinations.HOME) { inclusive = true }
-                    }
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
                 }
             }
         }

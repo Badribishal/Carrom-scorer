@@ -52,6 +52,38 @@ class CarromViewModel(application: Application) : AndroidViewModel(application) 
         queenPoints: Int = 5,
         enable24PlusQueenRule: Boolean = true
     ) {
+        val config = MatchConfig(
+            team1Name = team1Name.ifBlank { "Team 1" },
+            team2Name = team2Name.ifBlank { "Team 2" },
+            team1Players = team1Players,
+            team2Players = team2Players,
+            firstBreakerPlayerId = firstBreakerPlayerId,
+            proMode = proMode,
+            targetPoints = targetPoints,
+            nillBoardThreshold = nillBoardThreshold,
+            queenPoints = queenPoints,
+            enable24PlusQueenRule = enable24PlusQueenRule
+        )
+
+        val initialState = GameState(
+            matchId = System.currentTimeMillis(),
+            config = config,
+            team1Score = 0,
+            team2Score = 0,
+            currentBoardNumber = 1,
+            boardState = BoardLiveState(boardNumber = 1),
+            turnState = TurnLiveState(
+                currentHand = 1,
+                currentTurnIndexInRotation = 0,
+                currentOverallTurnNumber = 1
+            ),
+            startTime = System.currentTimeMillis()
+        )
+
+        // Set engine and live state synchronously so navigation opens the scoreboard immediately
+        engine = CarromGameEngine(initialState)
+        _liveGameState.value = initialState
+
         viewModelScope.launch {
             // Ensure players exist in DB with unique entities
             val finalT1 = team1Players.mapIndexed { idx, p ->
@@ -77,38 +109,19 @@ class CarromViewModel(application: Application) : AndroidViewModel(application) 
                 allFinal.find { it.id == firstBreakerPlayerId }?.id ?: finalT1.firstOrNull()?.id ?: 1L
             }
 
-            val config = MatchConfig(
-                team1Name = team1Name.ifBlank { "Team 1" },
-                team2Name = team2Name.ifBlank { "Team 2" },
+            val persistedConfig = config.copy(
                 team1Players = finalT1,
                 team2Players = finalT2,
-                firstBreakerPlayerId = finalBreakerId,
-                proMode = proMode,
-                targetPoints = targetPoints,
-                nillBoardThreshold = nillBoardThreshold,
-                queenPoints = queenPoints,
-                enable24PlusQueenRule = enable24PlusQueenRule
+                firstBreakerPlayerId = finalBreakerId
             )
+            val persistedState = initialState.copy(config = persistedConfig)
 
-            val initialState = GameState(
-                matchId = System.currentTimeMillis(),
-                config = config,
-                team1Score = 0,
-                team2Score = 0,
-                currentBoardNumber = 1,
-                boardState = BoardLiveState(boardNumber = 1),
-                turnState = TurnLiveState(
-                    currentHand = 1,
-                    currentTurnIndexInRotation = 0,
-                    currentOverallTurnNumber = 1
-                ),
-                startTime = System.currentTimeMillis()
-            )
-
-            val newEngine = CarromGameEngine(initialState)
-            engine = newEngine
-            _liveGameState.value = initialState
-            repository.saveActiveMatch(initialState)
+            // Update with persisted player IDs if engine is still on initial board
+            if (_liveGameState.value?.matchId == initialState.matchId && _liveGameState.value?.turnState?.currentOverallTurnNumber == 1) {
+                engine = CarromGameEngine(persistedState)
+                _liveGameState.value = persistedState
+            }
+            repository.saveActiveMatch(persistedState)
         }
     }
 
