@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Outer Navy Emblem Circle -->
+    <path
+        android:fillColor="#0D1B3E"
+        android:strokeColor="#1E3A8A"
+        android:strokeWidth="1.8"
+        android:pathData="M54,54m-33,0a33,33 0,1,1 66,0a33,33 0,1,1 -66,0" />
+
+    <!-- Subtle Inner Dark Navy Ring -->
+    <path
+        android:fillColor="#081026"
+        android:strokeColor="#1E293B"
+        android:strokeWidth="1.2"
+        android:pathData="M54,54m-24,0a24,24 0,1,1 48,0a24,24 0,1,1 -48,0" />
+
+    <!-- Carrom Board Center Precision Arc / Ring -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#38BDF8"
+        android:strokeAlpha="0.35"
+        android:strokeWidth="1.2"
+        android:pathData="M54,54m-15,0a15,15 0,1,1 30,0a15,15 0,1,1 -30,0" />
+
+    <!-- Center Base Ring -->
+    <path
+        android:fillColor="#0B1536"
+        android:strokeColor="#64748B"
+        android:strokeAlpha="0.6"
+        android:strokeWidth="1"
+        android:pathData="M54,54m-9,0a9,9 0,1,1 18,0a9,9 0,1,1 -18,0" />
+
+    <!-- Pure Vibrant Red Dot On Center -->
+    <path
+        android:fillColor="#E53935"
+        android:strokeColor="#FFCDD2"
+        android:strokeWidth="0.8"
+        android:pathData="M54,54m-5.5,0a5.5,5.5 0,1,1 11,0a5.5,5.5 0,1,1 -11,0" />
+
+    <!-- Inner Highlight of Red Dot -->
+    <path
+        android:fillColor="#FF8A80"
+        android:pathData="M52.5,52.5m-1.5,0a1.5,1.5 0,1,1 3,0a1.5,1.5 0,1,1 -3,0" />
+</vector>

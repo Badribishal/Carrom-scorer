@@ -1,0 +1,6 @@
+{
+  "name": "Carrom Score Keeper",
+  "description": "Complete Carrom Board match score keeper with 29-point target, Queen cover logic, Nill Board detection, pro mode and advanced statistics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
