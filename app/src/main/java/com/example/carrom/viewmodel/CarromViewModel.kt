@@ -186,6 +186,30 @@ class CarromViewModel(application: Application) : AndroidViewModel(application) 
         persistLiveState(newState)
     }
 
+    fun recordSimplifiedBoard(
+        winningTeamId: Int,
+        opponentRemainingCoins: Int,
+        queenCoveredByPlayerId: Long?,
+        queenCoveredByTeamId: Int?
+    ) {
+        val eng = engine ?: return
+        val newState = eng.recordSimplifiedBoard(
+            winningTeamId = winningTeamId,
+            opponentRemainingCoins = opponentRemainingCoins,
+            queenCoveredByPlayerId = queenCoveredByPlayerId,
+            queenCoveredByTeamId = queenCoveredByTeamId
+        )
+        _liveGameState.value = newState
+        persistLiveState(newState)
+    }
+
+    fun undoLastBoard() {
+        val eng = engine ?: return
+        val newState = eng.undoLastBoard()
+        _liveGameState.value = newState
+        persistLiveState(newState)
+    }
+
     fun finishAndSaveMatch() {
         val current = _liveGameState.value ?: return
         viewModelScope.launch {

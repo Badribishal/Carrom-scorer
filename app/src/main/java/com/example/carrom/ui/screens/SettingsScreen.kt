@@ -1,5 +1,6 @@
 package com.example.carrom.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -30,11 +31,13 @@ import com.example.ui.theme.MinimalThemePreset
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
+    advancedMode: Boolean = true,
     themeMode: AppThemeMode,
     themePreset: MinimalThemePreset,
     soundEnabled: Boolean,
     vibrationEnabled: Boolean,
     ruleDefaults: MatchRuleDefaults,
+    onAdvancedModeChange: (Boolean) -> Unit,
     onThemeChange: (AppThemeMode) -> Unit,
     onThemePresetChange: (MinimalThemePreset) -> Unit,
     onSoundChange: (Boolean) -> Unit,
@@ -70,6 +73,111 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Spacer(modifier = Modifier.height(4.dp))
+
+            // 0. SCOREBOARD TRACKING MODE (ADVANCED VERSION SWITCH)
+            Text(
+                text = "Scoreboard Mode",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            Card(
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (advancedMode) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                ),
+                border = BorderStroke(
+                    1.2.dp,
+                    if (advancedMode) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outlineVariant
+                ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("advanced_mode_card")
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(CircleShape)
+                                    .background(if (advancedMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = if (advancedMode) Icons.Default.Tune else Icons.Default.Scoreboard,
+                                    contentDescription = null,
+                                    tint = if (advancedMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "Advanced Version",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 15.sp
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = if (advancedMode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+                                    ) {
+                                        Text(
+                                            text = if (advancedMode) "PRO TRACKER" else "SIMPLIFIED",
+                                            fontWeight = FontWeight.Black,
+                                            fontSize = 9.sp,
+                                            color = if (advancedMode) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = if (advancedMode) "Turn-by-turn coin counts, fouls, hand counter & undo" else "Quick board-by-board score & Queen winner record only",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        Switch(
+                            checked = advancedMode,
+                            onCheckedChange = onAdvancedModeChange,
+                            modifier = Modifier.testTag("advanced_mode_switch")
+                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)
+                    ) {
+                        Text(
+                            text = if (advancedMode) {
+                                "✓ When ON: Displays full live match controls with real-time coin taps, foul recording, Queen covering flow, and turn rotation order."
+                            } else {
+                                "✓ When OFF: Displays a streamlined simplified board score entry (who won the board, opponent remaining coins, and who potted the Queen). Rules & scoring remain identical."
+                            },
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)
+                        )
+                    }
+                }
+            }
 
             // 1. MINIMAL THEME PRESETS SELECTOR
             Text(

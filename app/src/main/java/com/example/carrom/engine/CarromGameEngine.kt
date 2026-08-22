@@ -431,6 +431,159 @@ class CarromGameEngine(
         return _state
     }
 
+    /**
+     * Records a completed board directly in Simplified Scoreboard mode.
+     * Uses the exact same ICF scoring rules (Opponent remaining coins + Queen points with 19-point cutoff).
+     */
+    fun recordSimplifiedBoard(
+        winningTeamId: Int,
+        opponentRemainingCoins: Int,
+        queenCoveredByPlayerId: Long?,
+        queenCoveredByTeamId: Int?
+    ): GameState {
+        if (_state.isMatchOver) return _state
+
+        val currentBoardNum = _state.currentBoardNumber
+        val winningTeamName = if (winningTeamId == 1) _state.config.team1Name else _state.config.team2Name
+        val currentBreaker = _state.getBreakerForBoard(currentBoardNum)
+        val queenCoveredPlayerName = _state.rotationOrder.find { it.id == queenCoveredByPlayerId }?.name
+
+        var queenPointsAwarded = 0
+        if (queenCoveredByTeamId == winningTeamId && queenCoveredByPlayerId != null) {
+            val teamScoreBeforeBoard = if (winningTeamId == 1) _state.team1Score else _state.team2Score
+            val threshold = _state.config.queenStopThreshold
+            if (_state.config.enableQueenStopRule && teamScoreBeforeBoard >= threshold) {
+                queenPointsAwarded = 0
+            } else {
+                queenPointsAwarded = _state.config.queenPoints
+            }
+        }
+
+        val boardScore = opponentRemainingCoins + queenPointsAwarded
+        val newTeam1Score = if (winningTeamId == 1) _state.team1Score + boardScore else _state.team1Score
+        val newTeam2Score = if (winningTeamId == 2) _state.team2Score + boardScore else _state.team2Score
+
+        val losingTeamScore = if (winningTeamId == 1) _state.team2Score else _state.team1Score
+        val isNillBoard = losingTeamScore < _state.config.nillBoardThreshold
+
+        val team1NillWin = newTeam1Score >= _state.config.queenStopThreshold && newTeam2Score < _state.config.nillBoardThreshold
+        val team2NillWin = newTeam2Score >= _state.config.queenStopThreshold && newTeam1Score < _state.config.nillBoardThreshold
+        val team1TargetWin = newTeam1Score >= _state.config.targetPoints
+        val team2TargetWin = newTeam2Score >= _state.config.targetPoints
+
+        val isMatchWon = team1TargetWin || team2TargetWin || team1NillWin || team2NillWin
+        val matchWinnerId = when {
+            team1TargetWin || team1NillWin -> 1
+            team2TargetWin || team2NillWin -> 2
+            else -> null
+        }
+        val isWonByNillRule = (team1NillWin && matchWinnerId == 1) || (team2NillWin && matchWinnerId == 2)
+
+        val boardRecord = BoardRecord(
+            boardNumber = currentBoardNum,
+            breakerPlayerId = currentBreaker.id,
+            breakerPlayerName = currentBreaker.name,
+            winningTeamId = winningTeamId,
+            winningTeamName = winningTeamName,
+            whiteRemaining = if (winningTeamId == 1) 0 else opponentRemainingCoins,
+            blackRemaining = if (winningTeamId == 2) 0 else opponentRemainingCoins,
+            opponentRemainingCoins = opponentRemainingCoins,
+            queenCoveredByPlayerId = queenCoveredByPlayerId,
+            queenCoveredByPlayerName = queenCoveredPlayerName,
+            queenCoveredByTeamId = queenCoveredByTeamId,
+            queenPointsAwarded = queenPointsAwarded,
+            boardScore = boardScore,
+            isNillBoard = isNillBoard,
+            isNillMatchWin = isWonByNillRule,
+            team1ScoreAfterBoard = newTeam1Score,
+            team2ScoreAfterBoard = newTeam2Score,
+            handsPlayed = 1,
+            turnsPlayed = 1
+        )
+
+        // Add synthetic turn log for player stats persistence if queen was potted
+        val newTurnLogs = if (queenCoveredByPlayerId != null && queenCoveredByTeamId != null) {
+            _state.allTurnLogs + TurnRecord(
+                turnNumber = _state.completedBoards.size + 1,
+                handNumber = 1,
+                playerId = queenCoveredByPlayerId,
+                playerName = queenCoveredPlayerName ?: "Player",
+                teamId = queenCoveredByTeamId,
+                teamColor = _state.getTeamColorForBoard(queenCoveredByTeamId, currentBoardNum),
+                whitePocketed = if (_state.getTeamColorForBoard(queenCoveredByTeamId, currentBoardNum) == TeamColor.WHITE) (9 - opponentRemainingCoins) else 0,
+                blackPocketed = if (_state.getTeamColorForBoard(queenCoveredByTeamId, currentBoardNum) == TeamColor.BLACK) (9 - opponentRemainingCoins) else 0,
+                queenPocketed = true,
+                queenCovered = true,
+                penalties = 0
+            )
+        } else {
+            _state.allTurnLogs
+        }
+
+        if (isMatchWon) {
+            _state = _state.copy(
+                team1Score = newTeam1Score,
+                team2Score = newTeam2Score,
+                completedBoards = _state.completedBoards + boardRecord,
+                allTurnLogs = newTurnLogs,
+                isMatchOver = true,
+                matchWinnerTeamId = matchWinnerId,
+                isWonByNillRule = isWonByNillRule,
+                endTime = System.currentTimeMillis(),
+                currentBoardResultDialog = null
+            )
+        } else {
+            val nextBoardNum = currentBoardNum + 1
+            val nextBoardState = BoardLiveState(
+                boardNumber = nextBoardNum,
+                whiteRemaining = 9,
+                blackRemaining = 9,
+                queenStatus = QueenStatus.AVAILABLE
+            )
+            _state = _state.copy(
+                currentBoardNumber = nextBoardNum,
+                team1Score = newTeam1Score,
+                team2Score = newTeam2Score,
+                boardState = nextBoardState,
+                completedBoards = _state.completedBoards + boardRecord,
+                allTurnLogs = newTurnLogs,
+                isMatchOver = false,
+                matchWinnerTeamId = null,
+                currentBoardResultDialog = null
+            )
+        }
+
+        return _state
+    }
+
+    /**
+     * Undoes the last completed board in simplified mode.
+     */
+    fun undoLastBoard(): GameState {
+        if (_state.completedBoards.isEmpty()) return _state
+
+        val updatedBoards = _state.completedBoards.dropLast(1)
+        val lastBoard = updatedBoards.lastOrNull()
+
+        val newT1Score = lastBoard?.team1ScoreAfterBoard ?: 0
+        val newT2Score = lastBoard?.team2ScoreAfterBoard ?: 0
+        val newBoardNum = (lastBoard?.boardNumber ?: 0) + 1
+
+        _state = _state.copy(
+            currentBoardNumber = newBoardNum,
+            team1Score = newT1Score,
+            team2Score = newT2Score,
+            completedBoards = updatedBoards,
+            isMatchOver = false,
+            matchWinnerTeamId = null,
+            isWonByNillRule = false,
+            endTime = null,
+            currentBoardResultDialog = null
+        )
+
+        return _state
+    }
+
     fun updateState(newState: GameState) {
         _state = newState
     }

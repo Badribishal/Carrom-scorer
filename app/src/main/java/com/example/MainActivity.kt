@@ -118,6 +118,7 @@ fun CarromAppNavigation(
 
     val soundEnabled by settingsViewModel.soundEnabled.collectAsStateWithLifecycle()
     val vibrationEnabled by settingsViewModel.vibrationEnabled.collectAsStateWithLifecycle()
+    val advancedMode by settingsViewModel.advancedMode.collectAsStateWithLifecycle()
     val ruleDefaults by settingsViewModel.ruleDefaults.collectAsStateWithLifecycle()
     val themeMode by settingsViewModel.themeMode.collectAsStateWithLifecycle()
     val themePreset by settingsViewModel.themePreset.collectAsStateWithLifecycle()
@@ -225,40 +226,80 @@ fun CarromAppNavigation(
                     }
                 }
 
-                LiveScoreboardScreen(
-                    state = currentState,
-                    onPocketWhite = { carromViewModel.pocketWhite() },
-                    onPocketBlack = { carromViewModel.pocketBlack() },
-                    onPocketQueen = { carromViewModel.pocketQueen() },
-                    onRecordPenalty = { carromViewModel.recordPenalty() },
-                    onUndo = { carromViewModel.undo() },
-                    onEndTurn = { carromViewModel.endTurn() },
-                    onDismissBoardDialog = { carromViewModel.dismissBoardResultDialog() },
-                    onStartNextBoard = { carromViewModel.startNextBoard() },
-                    onFinishAndSaveMatch = {
-                        carromViewModel.finishAndSaveMatch()
-                        navController.navigate(Destinations.HOME) {
-                            popUpTo(Destinations.HOME) { inclusive = true }
+                if (advancedMode) {
+                    LiveScoreboardScreen(
+                        state = currentState,
+                        onPocketWhite = { carromViewModel.pocketWhite() },
+                        onPocketBlack = { carromViewModel.pocketBlack() },
+                        onPocketQueen = { carromViewModel.pocketQueen() },
+                        onRecordPenalty = { carromViewModel.recordPenalty() },
+                        onUndo = { carromViewModel.undo() },
+                        onEndTurn = { carromViewModel.endTurn() },
+                        onDismissBoardDialog = { carromViewModel.dismissBoardResultDialog() },
+                        onStartNextBoard = { carromViewModel.startNextBoard() },
+                        onFinishAndSaveMatch = {
+                            carromViewModel.finishAndSaveMatch()
+                            navController.navigate(Destinations.HOME) {
+                                popUpTo(Destinations.HOME) { inclusive = true }
+                            }
+                        },
+                        onAbandonMatch = {
+                            carromViewModel.abandonMatch()
+                            navController.navigate(Destinations.HOME) {
+                                popUpTo(Destinations.HOME) { inclusive = true }
+                            }
+                        },
+                        onNewMatch = {
+                            carromViewModel.finishAndSaveMatch()
+                            navController.navigate(Destinations.MATCH_SETUP) {
+                                popUpTo(Destinations.HOME)
+                            }
+                        },
+                        onHome = {
+                            navController.navigate(Destinations.HOME) {
+                                popUpTo(Destinations.HOME) { inclusive = true }
+                            }
                         }
-                    },
-                    onAbandonMatch = {
-                        carromViewModel.abandonMatch()
-                        navController.navigate(Destinations.HOME) {
-                            popUpTo(Destinations.HOME) { inclusive = true }
+                    )
+                } else {
+                    SimplifiedScoreboardScreen(
+                        state = currentState,
+                        onRecordBoardScore = { winningTeamId, opponentCoinsLeft, queenPlayerId, queenTeamId ->
+                            carromViewModel.recordSimplifiedBoard(
+                                winningTeamId = winningTeamId,
+                                opponentRemainingCoins = opponentCoinsLeft,
+                                queenCoveredByPlayerId = queenPlayerId,
+                                queenCoveredByTeamId = queenTeamId
+                            )
+                        },
+                        onUndoLastBoard = {
+                            carromViewModel.undoLastBoard()
+                        },
+                        onFinishAndSaveMatch = {
+                            carromViewModel.finishAndSaveMatch()
+                            navController.navigate(Destinations.HOME) {
+                                popUpTo(Destinations.HOME) { inclusive = true }
+                            }
+                        },
+                        onAbandonMatch = {
+                            carromViewModel.abandonMatch()
+                            navController.navigate(Destinations.HOME) {
+                                popUpTo(Destinations.HOME) { inclusive = true }
+                            }
+                        },
+                        onNewMatch = {
+                            carromViewModel.finishAndSaveMatch()
+                            navController.navigate(Destinations.MATCH_SETUP) {
+                                popUpTo(Destinations.HOME)
+                            }
+                        },
+                        onHome = {
+                            navController.navigate(Destinations.HOME) {
+                                popUpTo(Destinations.HOME) { inclusive = true }
+                            }
                         }
-                    },
-                    onNewMatch = {
-                        carromViewModel.finishAndSaveMatch()
-                        navController.navigate(Destinations.MATCH_SETUP) {
-                            popUpTo(Destinations.HOME)
-                        }
-                    },
-                    onHome = {
-                        navController.navigate(Destinations.HOME) {
-                            popUpTo(Destinations.HOME) { inclusive = true }
-                        }
-                    }
-                )
+                    )
+                }
             } else {
                 Box(
                     modifier = Modifier.fillMaxSize(),
@@ -339,11 +380,13 @@ fun CarromAppNavigation(
         // SETTINGS SCREEN
         composable(Destinations.SETTINGS) {
             SettingsScreen(
+                advancedMode = advancedMode,
                 themeMode = themeMode,
                 themePreset = themePreset,
                 soundEnabled = soundEnabled,
                 vibrationEnabled = vibrationEnabled,
                 ruleDefaults = ruleDefaults,
+                onAdvancedModeChange = { settingsViewModel.setAdvancedMode(it) },
                 onThemeChange = { settingsViewModel.setThemeMode(it) },
                 onThemePresetChange = { settingsViewModel.setThemePreset(it) },
                 onSoundChange = { settingsViewModel.setSoundEnabled(it) },

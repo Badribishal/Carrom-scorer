@@ -57,6 +57,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _vibrationEnabled = MutableStateFlow(prefs.getBoolean("vibration_enabled", true))
     val vibrationEnabled: StateFlow<Boolean> = _vibrationEnabled.asStateFlow()
 
+    private val _advancedMode = MutableStateFlow(prefs.getBoolean("advanced_mode", true))
+    val advancedMode: StateFlow<Boolean> = _advancedMode.asStateFlow()
+
     private val _ruleDefaults = MutableStateFlow(
         MatchRuleDefaults(
             targetPoints = prefs.getInt("target_points", 29),
@@ -87,6 +90,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun setVibrationEnabled(enabled: Boolean) {
         _vibrationEnabled.value = enabled
         prefs.edit().putBoolean("vibration_enabled", enabled).apply()
+    }
+
+    fun setAdvancedMode(enabled: Boolean) {
+        _advancedMode.value = enabled
+        prefs.edit().putBoolean("advanced_mode", enabled).apply()
     }
 
     fun updateRuleDefaults(newRules: MatchRuleDefaults) {
