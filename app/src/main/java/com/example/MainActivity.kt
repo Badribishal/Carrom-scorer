@@ -24,8 +24,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.carrom.ui.screens.*
-import com.example.ui.theme.CarromTheme
 import com.example.carrom.viewmodel.*
+import com.example.ui.theme.CarromScoreboardTheme
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -43,7 +43,7 @@ class MainActivity : ComponentActivity() {
                 AppThemeMode.DARK -> true
             }
 
-            CarromTheme(preset = themePreset, darkTheme = isDarkTheme) {
+            CarromScoreboardTheme(preset = themePreset, darkTheme = isDarkTheme) {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     CarromAppNavigation(settingsViewModel = settingsViewModel)
                 }
@@ -61,24 +61,33 @@ class MainActivity : ComponentActivity() {
      */
     private fun configureHighRefreshRate() {
         try {
-            window.setFormat(PixelFormat.RGBA_8888)
-
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                val display = display
-                val modes = display?.supportedModes
-                val maxMode = modes?.maxByOrNull { it.refreshRate }
-                if (maxMode != null && maxMode.refreshRate >= 90f) {
-                    val params = window.attributes
-                    params.preferredDisplayModeId = maxMode.modeId
-                    window.attributes = params
+                window.attributes.let { params ->
+                    val display = display
+                    if (display != null) {
+                        val supportedModes = display.supportedModes
+                        val highestRefreshRateMode = supportedModes.maxByOrNull { it.refreshRate }
+                        if (highestRefreshRateMode != null) {
+                            params.preferredDisplayModeId = highestRefreshRateMode.modeId
+                            window.attributes = params
+                        }
+                    }
                 }
             } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                val params = window.attributes
-                params.preferredRefreshRate = 120f
-                window.attributes = params
+                val windowManager = getSystemService(WINDOW_SERVICE) as? WindowManager
+                val display = windowManager?.defaultDisplay
+                if (display != null) {
+                    val supportedModes = display.supportedModes
+                    val highestRefreshRateMode = supportedModes.maxByOrNull { it.refreshRate }
+                    if (highestRefreshRateMode != null) {
+                        val params = window.attributes
+                        params.preferredDisplayModeId = highestRefreshRateMode.modeId
+                        window.attributes = params
+                    }
+                }
             }
         } catch (_: Exception) {
-            // Graceful fallback on devices without display mode switching
+            // Graceful fallback on devices with restrictive display policies
         }
     }
 }
@@ -87,8 +96,9 @@ object Destinations {
     const val HOME = "home"
     const val MATCH_SETUP = "match_setup"
     const val LIVE_SCOREBOARD = "live_scoreboard"
-    const val PLAYER_STATS = "player_stats"
+    const val MATCH_COMPLETE = "match_complete"
     const val MATCH_HISTORY = "match_history"
+    const val PLAYER_STATS = "player_stats"
     const val SETTINGS = "settings"
 }
 
@@ -96,7 +106,6 @@ object Destinations {
 fun CarromAppNavigation(
     settingsViewModel: SettingsViewModel,
     carromViewModel: CarromViewModel = viewModel(),
-    playerStatsViewModel: PlayerStatsViewModel = viewModel(),
     historyViewModel: MatchHistoryViewModel = viewModel()
 ) {
     val navController = rememberNavController()
@@ -182,7 +191,7 @@ fun CarromAppNavigation(
             MatchSetupScreen(
                 savedPlayers = allPlayers,
                 onBack = { navController.popBackStack() },
-                onStartMatch = { team1Name, team2Name, team1Players, team2Players, firstBreakerPlayerId, proMode, targetPoints, nillThreshold, queenPts, enable24Rule ->
+                onStartMatch = { team1Name, team2Name, team1Players, team2Players, firstBreakerPlayerId, proMode, targetPoints, nillThreshold, queenPts, queenStopThreshold, enableQueenStopRule ->
                     carromViewModel.startNewMatch(
                         team1Name = team1Name,
                         team2Name = team2Name,
@@ -193,7 +202,8 @@ fun CarromAppNavigation(
                         targetPoints = targetPoints,
                         nillBoardThreshold = nillThreshold,
                         queenPoints = queenPts,
-                        enable24PlusQueenRule = enable24Rule
+                        queenStopThreshold = queenStopThreshold,
+                        enableQueenStopRule = enableQueenStopRule
                     )
                     navController.navigate(Destinations.LIVE_SCOREBOARD) {
                         popUpTo(Destinations.HOME)
@@ -206,6 +216,15 @@ fun CarromAppNavigation(
         composable(Destinations.LIVE_SCOREBOARD) {
             val currentState = liveGameState ?: activeSavedMatch
             if (currentState != null) {
+                // If match is over, navigate automatically to match complete screen
+                if (currentState.isMatchOver) {
+                    LaunchedEffect(currentState.matchId, currentState.isMatchOver) {
+                        navController.navigate(Destinations.MATCH_COMPLETE) {
+                            popUpTo(Destinations.HOME)
+                        }
+                    }
+                }
+
                 LiveScoreboardScreen(
                     state = currentState,
                     onPocketWhite = { carromViewModel.pocketWhite() },
@@ -250,15 +269,38 @@ fun CarromAppNavigation(
             }
         }
 
-        // PLAYER STATS SCREEN
-        composable(Destinations.PLAYER_STATS) {
-            PlayerStatsScreen(
-                players = allPlayers,
-                onBack = { navController.popBackStack() },
-                onAddNewPlayer = { name, colorIndex ->
-                    playerStatsViewModel.addPlayer(name, colorIndex)
+        // MATCH COMPLETE SCREEN
+        composable(Destinations.MATCH_COMPLETE) {
+            val currentState = liveGameState ?: activeSavedMatch
+            if (currentState != null) {
+                MatchCompleteScreen(
+                    state = currentState,
+                    onSaveAndFinish = {
+                        carromViewModel.finishAndSaveMatch()
+                        navController.navigate(Destinations.HOME) {
+                            popUpTo(Destinations.HOME) { inclusive = true }
+                        }
+                    },
+                    onNewMatch = {
+                        carromViewModel.finishAndSaveMatch()
+                        navController.navigate(Destinations.MATCH_SETUP) {
+                            popUpTo(Destinations.HOME)
+                        }
+                    },
+                    onHome = {
+                        carromViewModel.finishAndSaveMatch()
+                        navController.navigate(Destinations.HOME) {
+                            popUpTo(Destinations.HOME) { inclusive = true }
+                        }
+                    }
+                )
+            } else {
+                LaunchedEffect(Unit) {
+                    navController.navigate(Destinations.HOME) {
+                        popUpTo(Destinations.HOME) { inclusive = true }
+                    }
                 }
-            )
+            }
         }
 
         // MATCH HISTORY SCREEN
@@ -266,8 +308,30 @@ fun CarromAppNavigation(
             MatchHistoryScreen(
                 matches = allMatches,
                 selectedMatchData = selectedMatchData,
-                onSelectMatch = { match -> historyViewModel.selectMatch(match) },
-                onDeleteMatch = { id -> historyViewModel.deleteMatch(id) },
+                onSelectMatch = { matchEntity ->
+                    historyViewModel.selectMatch(matchEntity)
+                },
+                onDeleteMatch = { matchId ->
+                    historyViewModel.deleteMatch(matchId)
+                },
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        // PLAYER STATS SCREEN
+        composable(Destinations.PLAYER_STATS) {
+            PlayerStatsScreen(
+                players = allPlayers,
+                onAddNewPlayer = { name, colorIndex ->
+                    carromViewModel.startNewMatch(
+                        team1Name = "Team 1",
+                        team2Name = "Team 2",
+                        team1Players = emptyList(),
+                        team2Players = emptyList(),
+                        firstBreakerPlayerId = 0L,
+                        proMode = true
+                    )
+                },
                 onBack = { navController.popBackStack() }
             )
         }
@@ -280,25 +344,30 @@ fun CarromAppNavigation(
                 soundEnabled = soundEnabled,
                 vibrationEnabled = vibrationEnabled,
                 ruleDefaults = ruleDefaults,
-                onThemeChange = { mode -> settingsViewModel.setThemeMode(mode) },
-                onThemePresetChange = { preset -> settingsViewModel.setThemePreset(preset) },
-                onSoundChange = { enabled -> settingsViewModel.setSoundEnabled(enabled) },
-                onVibrationChange = { enabled -> settingsViewModel.setVibrationEnabled(enabled) },
-                onRulesChange = { rules -> settingsViewModel.updateRuleDefaults(rules) },
+                onThemeChange = { settingsViewModel.setThemeMode(it) },
+                onThemePresetChange = { settingsViewModel.setThemePreset(it) },
+                onSoundChange = { settingsViewModel.setSoundEnabled(it) },
+                onVibrationChange = { settingsViewModel.setVibrationEnabled(it) },
+                onRulesChange = { settingsViewModel.updateRuleDefaults(it) },
                 onResetAllData = {
                     settingsViewModel.resetAllData {
+                        carromViewModel.clearLiveState()
                         navController.navigate(Destinations.HOME) {
                             popUpTo(Destinations.HOME) { inclusive = true }
                         }
                     }
                 },
-                onOpenRulesDialog = { showGlobalRulesDialog = true },
+                onOpenRulesDialog = {
+                    showGlobalRulesDialog = true
+                },
                 onBack = { navController.popBackStack() }
             )
         }
     }
 
     if (showGlobalRulesDialog) {
-        RulesDialog(onDismiss = { showGlobalRulesDialog = false })
+        RulesDialog(
+            onDismiss = { showGlobalRulesDialog = false }
+        )
     }
 }

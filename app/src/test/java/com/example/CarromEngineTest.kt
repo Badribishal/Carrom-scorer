@@ -21,14 +21,15 @@ class CarromEngineTest {
         sampleConfig = MatchConfig(
             team1Name = "Team 1",
             team2Name = "Team 2",
-            team1Players = listOf(Player(1, "Player A"), Player(2, "Player B")),
-            team2Players = listOf(Player(3, "Player C"), Player(4, "Player D")),
+            team1Players = listOf(Player(1, "Player 1"), Player(3, "Player 3")),
+            team2Players = listOf(Player(2, "Player 2"), Player(4, "Player 4")),
             firstBreakerPlayerId = 1L, // Team 1 breaks -> White
             proMode = true,
             targetPoints = 29,
             nillBoardThreshold = 7,
             queenPoints = 5,
-            enable24PlusQueenRule = true
+            queenStopThreshold = 19,
+            enableQueenStopRule = true
         )
 
         val initialState = GameState(
@@ -42,6 +43,36 @@ class CarromEngineTest {
         )
 
         engine = CarromGameEngine(initialState)
+    }
+
+    @Test
+    fun test_sequentialTurnRotation_player1_then_player2_then_player3_then_player4() {
+        val rotation = sampleConfig.buildRotationOrder()
+        assertEquals(4, rotation.size)
+        assertEquals("Player 1", rotation[0].name)
+        assertEquals("Player 2", rotation[1].name)
+        assertEquals("Player 3", rotation[2].name)
+        assertEquals("Player 4", rotation[3].name)
+
+        assertEquals("Player 1", engine.state.currentPlayer.name)
+        assertEquals("Player 2", engine.state.nextPlayer.name)
+
+        engine.endTurn()
+        assertEquals("Player 2", engine.state.currentPlayer.name)
+        assertEquals("Player 3", engine.state.nextPlayer.name)
+
+        engine.endTurn()
+        assertEquals("Player 3", engine.state.currentPlayer.name)
+        assertEquals("Player 4", engine.state.nextPlayer.name)
+
+        engine.endTurn()
+        assertEquals("Player 4", engine.state.currentPlayer.name)
+        assertEquals("Player 1", engine.state.nextPlayer.name)
+
+        engine.endTurn()
+        assertEquals("Player 1", engine.state.currentPlayer.name)
+        assertEquals("Player 2", engine.state.nextPlayer.name)
+        assertEquals(2, engine.state.turnState.currentHand)
     }
 
     @Test
@@ -145,15 +176,72 @@ class CarromEngineTest {
 
     @Test
     fun test8_winningTeamCompletesBoard_opponentHasOnly5Points_nillBoardTriggered() {
-        // Team 2 has 5 points total in match
-        val customState = engine.state.copy(team1Score = 10, team2Score = 5)
+        // Team 2 has 5 points total in match, Team 1 has 5
+        val customState = engine.state.copy(team1Score = 5, team2Score = 5)
         engine.updateState(customState)
 
-        // Team 1 wins board
+        // Team 1 wins board with 3 points (6 black pocketed -> 3 left)
+        repeat(6) { engine.pocketBlack() }
         repeat(9) { engine.pocketWhite() }
 
         assertTrue(engine.state.boardState.isCompleted)
         assertTrue(engine.state.boardState.isNillBoard)
+        assertEquals(8, engine.state.team1Score)
+        assertFalse(engine.state.isMatchOver)
+    }
+
+    @Test
+    fun test8b_team1Scores19WithQueenPotted_team2Under7_team1WinsMatchByNillBoard() {
+        // Team 1 has 10 points, Team 2 has 4 points (< 7)
+        val customState = engine.state.copy(team1Score = 10, team2Score = 4)
+        engine.updateState(customState)
+
+        // Team 1 pockets queen and covers with white (+5 pts)
+        engine.pocketQueen()
+        engine.pocketWhite()
+
+        // 5 black pocketed (4 black left = +4 pts)
+        repeat(5) { engine.pocketBlack() }
+
+        // Pocket remaining 8 white (9 total white) -> Board total = 4 coins + 5 queen = 9 pts -> Team 1 total = 19 pts!
+        repeat(8) { engine.pocketWhite() }
+
+        assertEquals(19, engine.state.team1Score)
+        assertEquals(4, engine.state.team2Score)
+        assertTrue(engine.state.boardState.isCompleted)
+        assertTrue(engine.state.boardState.isNillBoard)
+        assertTrue(engine.state.isMatchOver)
+        assertTrue(engine.state.isWonByNillRule)
+        assertEquals(1, engine.state.matchWinnerTeamId)
+    }
+
+    @Test
+    fun test8c_team2Scores19WithQueenPotted_team1Under7_team2WinsMatchByNillBoard() {
+        // Team 2 plays Black (e.g. breaker is Player 1 White, but Player 2 takes turn)
+        // Set state where Team 2 is active, has 10 points, Team 1 has 5 points (< 7)
+        engine.endTurn() // Now Player 2 (Team 2, Black) is shooting
+        assertEquals(2, engine.state.currentTeamId)
+
+        val customState = engine.state.copy(team1Score = 5, team2Score = 10)
+        engine.updateState(customState)
+
+        // Team 2 pockets queen and covers with black (+5 pts)
+        engine.pocketQueen()
+        engine.pocketBlack()
+
+        // 5 white pocketed (4 white left = +4 pts)
+        repeat(5) { engine.pocketWhite() }
+
+        // Pocket remaining 8 black (9 total black) -> Board total = 4 coins + 5 queen = 9 pts -> Team 2 total = 19 pts!
+        repeat(8) { engine.pocketBlack() }
+
+        assertEquals(5, engine.state.team1Score)
+        assertEquals(19, engine.state.team2Score)
+        assertTrue(engine.state.boardState.isCompleted)
+        assertTrue(engine.state.boardState.isNillBoard)
+        assertTrue(engine.state.isMatchOver)
+        assertTrue(engine.state.isWonByNillRule)
+        assertEquals(2, engine.state.matchWinnerTeamId)
     }
 
     @Test
@@ -167,6 +255,9 @@ class CarromEngineTest {
 
         assertTrue(engine.state.boardState.isCompleted)
         assertFalse(engine.state.boardState.isNillBoard)
+        assertFalse(engine.state.isWonByNillRule)
+        // Since Team 2 has 7 points (>= 7), match is NOT over via Nill rule (19 vs 7), continues towards 29 points
+        assertFalse(engine.state.isMatchOver)
     }
 
     @Test
@@ -225,12 +316,12 @@ class CarromEngineTest {
     fun test15_completeAllPlayersTurns_handIncrementsBy1() {
         assertEquals(1, engine.state.turnState.currentHand)
 
-        // 4 players in rotation: P1 -> P3 -> P2 -> P4
+        // 4 players in rotation: P1 -> P2 -> P3 -> P4
         engine.endTurn() // Turn 1 (P1)
         assertEquals(1, engine.state.turnState.currentHand)
-        engine.endTurn() // Turn 2 (P3)
+        engine.endTurn() // Turn 2 (P2)
         assertEquals(1, engine.state.turnState.currentHand)
-        engine.endTurn() // Turn 3 (P2)
+        engine.endTurn() // Turn 3 (P3)
         assertEquals(1, engine.state.turnState.currentHand)
         engine.endTurn() // Turn 4 (P4)
 

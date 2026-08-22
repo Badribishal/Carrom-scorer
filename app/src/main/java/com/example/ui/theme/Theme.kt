@@ -9,14 +9,51 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 
-enum class MinimalThemePreset(val displayName: String, val description: String) {
-    SLATE("Minimal Slate", "Clean charcoal & neutral slate with crisp modern contrast"),
-    IVORY("Nordic Ivory", "Warm off-white birch with subtle organic linen tones"),
-    OBSIDIAN("Midnight Obsidian", "True black OLED with razor-sharp minimalist accents"),
-    SAGE("Zen Sage", "Calming muted botanical sage & soft graphite balance"),
-    CLASSIC("Classic Carrom", "Warm amber timber tones for traditional carrom heritage")
+enum class MinimalThemePreset(
+    val displayName: String,
+    val description: String,
+    val primaryColor: Color,
+    val secondaryColor: Color,
+    val backgroundColor: Color
+) {
+    SLATE(
+        "Minimal Slate",
+        "Clean charcoal & neutral slate with crisp modern contrast",
+        SlatePrimaryLight,
+        SlateSecondaryLight,
+        SlateBackgroundLight
+    ),
+    IVORY(
+        "Nordic Ivory",
+        "Warm off-white birch with subtle organic linen tones",
+        IvoryPrimaryLight,
+        IvorySecondaryLight,
+        IvoryBackgroundLight
+    ),
+    OBSIDIAN(
+        "Midnight Obsidian",
+        "True black OLED with razor-sharp minimalist accents",
+        ObsidianPrimaryDark,
+        ObsidianSecondaryDark,
+        ObsidianBackgroundDark
+    ),
+    SAGE(
+        "Zen Sage",
+        "Calming muted botanical sage & soft graphite balance",
+        SagePrimaryLight,
+        SageSecondaryLight,
+        SageBackgroundLight
+    ),
+    CLASSIC(
+        "Classic Carrom",
+        "Warm amber timber tones for traditional carrom heritage",
+        AmberPrimaryLight,
+        AmberSecondaryLight,
+        AmberBackgroundLight
+    )
 }
 
 // 1. Minimal Slate Color Schemes
@@ -199,7 +236,7 @@ private val SageDarkColorScheme = darkColorScheme(
     outline = SageOutlineDark
 )
 
-// 5. Classic Carrom Color Schemes
+// 5. Classic Carrom (Wood & Amber)
 private val AmberLightColorScheme = lightColorScheme(
     primary = AmberPrimaryLight,
     onPrimary = AmberOnPrimaryLight,
@@ -245,24 +282,23 @@ private val AmberDarkColorScheme = darkColorScheme(
 )
 
 @Composable
-fun CarromTheme(
+fun CarromScoreboardTheme(
     preset: MinimalThemePreset = MinimalThemePreset.SLATE,
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = false,
-    content: @Composable () -> Unit,
+    content: @Composable () -> Unit
 ) {
     val colorScheme: ColorScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         }
-        else -> when (preset) {
-            MinimalThemePreset.SLATE -> if (darkTheme) SlateDarkColorScheme else SlateLightColorScheme
-            MinimalThemePreset.IVORY -> if (darkTheme) IvoryDarkColorScheme else IvoryLightColorScheme
-            MinimalThemePreset.OBSIDIAN -> if (darkTheme) ObsidianDarkColorScheme else ObsidianLightColorScheme
-            MinimalThemePreset.SAGE -> if (darkTheme) SageDarkColorScheme else SageLightColorScheme
-            MinimalThemePreset.CLASSIC -> if (darkTheme) AmberDarkColorScheme else AmberLightColorScheme
-        }
+        preset == MinimalThemePreset.SLATE -> if (darkTheme) SlateDarkColorScheme else SlateLightColorScheme
+        preset == MinimalThemePreset.IVORY -> if (darkTheme) IvoryDarkColorScheme else IvoryLightColorScheme
+        preset == MinimalThemePreset.OBSIDIAN -> if (darkTheme) ObsidianDarkColorScheme else ObsidianLightColorScheme
+        preset == MinimalThemePreset.SAGE -> if (darkTheme) SageDarkColorScheme else SageLightColorScheme
+        preset == MinimalThemePreset.CLASSIC -> if (darkTheme) AmberDarkColorScheme else AmberLightColorScheme
+        else -> if (darkTheme) SlateDarkColorScheme else SlateLightColorScheme
     }
 
     MaterialTheme(

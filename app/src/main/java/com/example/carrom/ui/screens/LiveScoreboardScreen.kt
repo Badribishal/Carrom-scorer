@@ -1,8 +1,10 @@
 package com.example.carrom.ui.screens
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,6 +19,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -145,83 +149,20 @@ fun LiveScoreboardScreen(
                     containerColor = MaterialTheme.colorScheme.surface
                 )
             )
-        },
-        bottomBar = {
-            // DOCKED BOTTOM CONTROLS: Always accessible without scrolling
-            Surface(
-                tonalElevation = 6.dp,
-                shadowElevation = 8.dp,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(horizontal = 14.dp, vertical = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Undo Button
-                    OutlinedButton(
-                        onClick = onUndo,
-                        enabled = canUndo,
-                        shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier
-                            .weight(0.35f)
-                            .height(50.dp)
-                            .testTag("undo_button")
-                    ) {
-                        Icon(imageVector = Icons.Default.Undo, contentDescription = "Undo", modifier = Modifier.size(18.dp))
-                        if (canUndo) {
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("(${turn.undoStack.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-
-                    // End Turn Button
-                    Button(
-                        onClick = onEndTurn,
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary
-                        ),
-                        modifier = Modifier
-                            .weight(0.65f)
-                            .height(50.dp)
-                            .testTag("end_turn_button")
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Text("End Turn", fontWeight = FontWeight.Black, fontSize = 14.sp)
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Icon(imageVector = Icons.Default.ArrowForward, contentDescription = null, modifier = Modifier.size(16.dp))
-                                }
-                                Text(
-                                    text = "Next: ${nextPlayer.name}",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Normal,
-                                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f),
-                                    maxLines = 1
-                                )
-                            }
-                        }
-                    }
-                }
-            }
         }
     ) { innerPadding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 14.dp, vertical = 6.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 14.dp, vertical = 6.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
             // 1. MINIMALIST DUAL SCOREBOARD HEADER
             Card(
                 shape = RoundedCornerShape(16.dp),
@@ -302,6 +243,15 @@ fun LiveScoreboardScreen(
                                     }
                                 )
                             }
+                        }
+                        if (config.enableQueenStopRule && (state.team1Score >= config.queenStopThreshold || state.team2Score >= config.queenStopThreshold)) {
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "${config.queenStopThreshold}+ Rule Active",
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = CarromQueenRed
+                            )
                         }
                     }
 
@@ -428,7 +378,7 @@ fun LiveScoreboardScreen(
                     elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp),
                     modifier = Modifier
                         .weight(1f)
-                        .height(60.dp)
+                        .height(58.dp)
                         .testTag("pocket_white_button")
                 ) {
                     Row(
@@ -480,7 +430,7 @@ fun LiveScoreboardScreen(
                     elevation = ButtonDefaults.buttonElevation(defaultElevation = 2.dp),
                     modifier = Modifier
                         .weight(1f)
-                        .height(60.dp)
+                        .height(58.dp)
                         .testTag("pocket_black_button")
                 ) {
                     Row(
@@ -575,7 +525,7 @@ fun LiveScoreboardScreen(
                 }
             }
 
-            // Compact Turn Rotation Order
+            // 4. Turn Rotation Order
             Card(
                 shape = RoundedCornerShape(12.dp),
                 colors = CardDefaults.cardColors(
@@ -618,8 +568,162 @@ fun LiveScoreboardScreen(
                     }
                 }
             }
+
+            // Bottom scroll margin so content is fully accessible above floating frosted bar
+            Spacer(modifier = Modifier.height(100.dp))
+        }
+
+        // Floating Frosted Glass Action Bar (Undo + Next Turn)
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 14.dp, vertical = 10.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
+                border = BorderStroke(
+                    1.2.dp,
+                    Brush.linearGradient(
+                        listOf(
+                            Color.White.copy(alpha = 0.65f),
+                            Color.White.copy(alpha = 0.2f),
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+                        )
+                    )
+                ),
+                shadowElevation = 16.dp,
+                tonalElevation = 6.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .shadow(
+                        elevation = 16.dp,
+                        shape = RoundedCornerShape(24.dp),
+                        spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
+                        ambientColor = Color.Black.copy(alpha = 0.2f)
+                    )
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color.White.copy(alpha = 0.22f),
+                                    Color.White.copy(alpha = 0.05f)
+                                )
+                            )
+                        )
+                        .padding(horizontal = 10.dp, vertical = 8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Floating Frosted Undo Button
+                        OutlinedButton(
+                            onClick = onUndo,
+                            enabled = canUndo,
+                            shape = RoundedCornerShape(18.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (canUndo) 0.65f else 0.3f),
+                                contentColor = if (canUndo) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f),
+                                disabledContainerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.25f)
+                            ),
+                            border = BorderStroke(
+                                1.dp,
+                                if (canUndo) MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                            ),
+                            modifier = Modifier
+                                .weight(0.32f)
+                                .height(54.dp)
+                                .testTag("undo_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Undo,
+                                contentDescription = "Undo",
+                                modifier = Modifier.size(20.dp)
+                            )
+                            if (canUndo) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "(${turn.undoStack.size})",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Black
+                                )
+                            }
+                        }
+
+                        // Floating Frosted Next Turn Button
+                        Button(
+                            onClick = onEndTurn,
+                            shape = RoundedCornerShape(18.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            ),
+                            elevation = ButtonDefaults.buttonElevation(
+                                defaultElevation = 6.dp,
+                                pressedElevation = 2.dp
+                            ),
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.4f)),
+                            modifier = Modifier
+                                .weight(0.68f)
+                                .height(54.dp)
+                                .shadow(
+                                    elevation = 8.dp,
+                                    shape = RoundedCornerShape(18.dp),
+                                    spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                                )
+                                .testTag("end_turn_button")
+                                .testTag("next_turn_button")
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center
+                                    ) {
+                                        Text(
+                                            text = "Next Turn",
+                                            fontWeight = FontWeight.Black,
+                                            fontSize = 15.sp,
+                                            letterSpacing = 0.3.sp
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Icon(
+                                            imageVector = Icons.Default.ArrowForward,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = "Up next: ${nextPlayer.name}",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.92f),
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
+}
 
     // Board Result Dialog when board completes
     if (state.currentBoardResultDialog != null) {
@@ -641,28 +745,14 @@ fun LiveScoreboardScreen(
         )
     }
 
-    // Abandon Confirmation Dialog
+    // Abandon Confirmation Dialog (Beautifully themed)
     if (showAbandonConfirmDialog) {
-        AlertDialog(
-            onDismissRequest = { showAbandonConfirmDialog = false },
-            title = { Text("Abandon Current Match?") },
-            text = { Text("Your match progress will be discarded. Are you sure you want to exit?") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        showAbandonConfirmDialog = false
-                        onAbandonMatch()
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                    modifier = Modifier.testTag("confirm_abandon_match_button")
-                ) {
-                    Text("Abandon Match")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showAbandonConfirmDialog = false }) {
-                    Text("Continue Playing")
-                }
+        AbandonMatchDialog(
+            state = state,
+            onDismiss = { showAbandonConfirmDialog = false },
+            onConfirmAbandon = {
+                showAbandonConfirmDialog = false
+                onAbandonMatch()
             }
         )
     }

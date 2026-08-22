@@ -15,7 +15,8 @@ object CarromJsonParser {
         json.put("targetPoints", config.targetPoints)
         json.put("nillBoardThreshold", config.nillBoardThreshold)
         json.put("queenPoints", config.queenPoints)
-        json.put("enable24PlusQueenRule", config.enable24PlusQueenRule)
+        json.put("queenStopThreshold", config.queenStopThreshold)
+        json.put("enableQueenStopRule", config.enableQueenStopRule)
 
         val t1Array = JSONArray()
         config.team1Players.forEach { p ->
@@ -49,7 +50,8 @@ object CarromJsonParser {
         val targetPoints = json.optInt("targetPoints", 29)
         val nillBoardThreshold = json.optInt("nillBoardThreshold", 7)
         val queenPoints = json.optInt("queenPoints", 5)
-        val enable24PlusQueenRule = json.optBoolean("enable24PlusQueenRule", true)
+        val queenStopThreshold = json.optInt("queenStopThreshold", 19)
+        val enableQueenStopRule = if (json.has("enableQueenStopRule")) json.optBoolean("enableQueenStopRule", true) else json.optBoolean("enable24PlusQueenRule", true)
 
         val team1Players = mutableListOf<Player>()
         val t1Arr = json.optJSONArray("team1Players") ?: JSONArray()
@@ -87,7 +89,8 @@ object CarromJsonParser {
             targetPoints = targetPoints,
             nillBoardThreshold = nillBoardThreshold,
             queenPoints = queenPoints,
-            enable24PlusQueenRule = enable24PlusQueenRule
+            queenStopThreshold = queenStopThreshold,
+            enableQueenStopRule = enableQueenStopRule
         )
     }
 
@@ -109,6 +112,7 @@ object CarromJsonParser {
             obj.put("queenPointsAwarded", b.queenPointsAwarded)
             obj.put("boardScore", b.boardScore)
             obj.put("isNillBoard", b.isNillBoard)
+            obj.put("isNillMatchWin", b.isNillMatchWin)
             obj.put("team1ScoreAfterBoard", b.team1ScoreAfterBoard)
             obj.put("team2ScoreAfterBoard", b.team2ScoreAfterBoard)
             obj.put("handsPlayed", b.handsPlayed)
@@ -140,6 +144,7 @@ object CarromJsonParser {
                     queenPointsAwarded = obj.getInt("queenPointsAwarded"),
                     boardScore = obj.getInt("boardScore"),
                     isNillBoard = obj.optBoolean("isNillBoard", false),
+                    isNillMatchWin = obj.optBoolean("isNillMatchWin", false),
                     team1ScoreAfterBoard = obj.getInt("team1ScoreAfterBoard"),
                     team2ScoreAfterBoard = obj.getInt("team2ScoreAfterBoard"),
                     handsPlayed = obj.optInt("handsPlayed", 1),
@@ -206,6 +211,7 @@ object CarromJsonParser {
         json.put("currentBoardNumber", state.currentBoardNumber)
         json.put("isMatchOver", state.isMatchOver)
         if (state.matchWinnerTeamId != null) json.put("matchWinnerTeamId", state.matchWinnerTeamId)
+        json.put("isWonByNillRule", state.isWonByNillRule)
         json.put("startTime", state.startTime)
         if (state.endTime != null) json.put("endTime", state.endTime)
 
@@ -252,6 +258,7 @@ object CarromJsonParser {
         val currentBoardNumber = json.getInt("currentBoardNumber")
         val isMatchOver = json.optBoolean("isMatchOver", false)
         val matchWinnerTeamId = if (json.has("matchWinnerTeamId")) json.getInt("matchWinnerTeamId") else null
+        val isWonByNillRule = json.optBoolean("isWonByNillRule", false)
         val startTime = json.optLong("startTime", System.currentTimeMillis())
         val endTime = if (json.has("endTime")) json.getLong("endTime") else null
 
@@ -299,6 +306,7 @@ object CarromJsonParser {
             allTurnLogs = allTurnLogs,
             isMatchOver = isMatchOver,
             matchWinnerTeamId = matchWinnerTeamId,
+            isWonByNillRule = isWonByNillRule,
             startTime = startTime,
             endTime = endTime
         )

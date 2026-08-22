@@ -40,7 +40,8 @@ data class MatchConfig(
     val targetPoints: Int = 29,
     val nillBoardThreshold: Int = 7,
     val queenPoints: Int = 5,
-    val enable24PlusQueenRule: Boolean = true
+    val queenStopThreshold: Int = 19, // Queen points cease once team reaches threshold (standard 19 pts or 24 pts)
+    val enableQueenStopRule: Boolean = true // Flag to toggle the threshold rule
 ) {
     val isDoubles: Boolean
         get() = team1Players.size >= 2 && team2Players.size >= 2
@@ -70,6 +71,7 @@ data class MatchConfig(
 
     /**
      * Build the turn rotation order starting from the breaker and alternating teams.
+     * Sequence around the board: Player 1 -> Player 2 -> Player 3 -> Player 4
      */
     fun buildRotationOrder(): List<Player> {
         if (!isDoubles) {
@@ -78,23 +80,24 @@ data class MatchConfig(
             return if (breakingTeamId == 1) listOf(t1p, t2p) else listOf(t2p, t1p)
         }
 
-        val t1p1 = team1Players.getOrNull(0) ?: Player(1, "Player 1")
-        val t1p2 = team1Players.getOrNull(1) ?: Player(2, "Player 2")
-        val t2p1 = team2Players.getOrNull(0) ?: Player(3, "Player 3")
-        val t2p2 = team2Players.getOrNull(1) ?: Player(4, "Player 4")
+        val p1 = team1Players.getOrNull(0) ?: Player(1, "Player 1")
+        val p2 = team2Players.getOrNull(0) ?: Player(2, "Player 2")
+        val p3 = team1Players.getOrNull(1) ?: Player(3, "Player 3")
+        val p4 = team2Players.getOrNull(1) ?: Player(4, "Player 4")
 
-        return if (breakingTeamId == 1) {
-            if (firstBreakerPlayerId == t1p1.id || team1Players.firstOrNull()?.id == firstBreakerPlayerId) {
-                listOf(t1p1, t2p1, t1p2, t2p2)
-            } else {
-                listOf(t1p2, t2p1, t1p1, t2p2)
-            }
+        val standardClockwiseOrder = listOf(p1, p2, p3, p4)
+
+        val breakerIndex = standardClockwiseOrder.indexOfFirst {
+            it.id == firstBreakerPlayerId || it.name.equals(
+                standardClockwiseOrder.find { p -> p.id == firstBreakerPlayerId }?.name,
+                ignoreCase = true
+            )
+        }
+
+        return if (breakerIndex > 0) {
+            standardClockwiseOrder.drop(breakerIndex) + standardClockwiseOrder.take(breakerIndex)
         } else {
-            if (firstBreakerPlayerId == t2p1.id || team2Players.firstOrNull()?.id == firstBreakerPlayerId) {
-                listOf(t2p1, t1p1, t2p2, t1p2)
-            } else {
-                listOf(t2p2, t1p1, t2p1, t1p2)
-            }
+            standardClockwiseOrder
         }
     }
 }
@@ -146,6 +149,7 @@ data class BoardRecord(
     val queenPointsAwarded: Int,
     val boardScore: Int,
     val isNillBoard: Boolean,
+    val isNillMatchWin: Boolean = false,
     val team1ScoreAfterBoard: Int,
     val team2ScoreAfterBoard: Int,
     val handsPlayed: Int,
@@ -180,70 +184,39 @@ data class TurnLiveState(
 )
 
 data class GameState(
-    val matchId: Long = System.currentTimeMillis(),
+    val matchId: Long,
     val config: MatchConfig,
     val team1Score: Int = 0,
     val team2Score: Int = 0,
     val currentBoardNumber: Int = 1,
-    val boardState: BoardLiveState = BoardLiveState(boardNumber = 1),
+    val boardState: BoardLiveState = BoardLiveState(),
     val turnState: TurnLiveState = TurnLiveState(),
     val completedBoards: List<BoardRecord> = emptyList(),
     val allTurnLogs: List<TurnRecord> = emptyList(),
     val isMatchOver: Boolean = false,
     val matchWinnerTeamId: Int? = null,
+    val isWonByNillRule: Boolean = false,
     val startTime: Long = System.currentTimeMillis(),
     val endTime: Long? = null,
     val currentBoardResultDialog: BoardRecord? = null
 ) {
-    val rotationOrder: List<Player> = config.buildRotationOrder()
-
-    /**
-     * Returns the Player who has the Break for the given board number (1-based).
-     */
-    fun getBreakerForBoard(boardNum: Int = currentBoardNumber): Player {
-        val order = rotationOrder
-        if (order.isEmpty()) return Player(1, "Player 1")
-        val idx = ((boardNum - 1) % order.size + order.size) % order.size
-        return order[idx]
-    }
-
-    val currentBoardBreaker: Player
-        get() = getBreakerForBoard(currentBoardNumber)
-
-    /**
-     * Returns the Team ID (1 or 2) that has the Break for the given board number.
-     */
-    fun getBreakingTeamIdForBoard(boardNum: Int = currentBoardNumber): Int {
-        return config.getPlayerTeamId(getBreakerForBoard(boardNum))
-    }
-
-    val currentBoardBreakingTeamId: Int
-        get() = getBreakingTeamIdForBoard(currentBoardNumber)
-
-    /**
-     * In Carrom, whichever player/team breaks a given board plays with WHITE coins (9 coins).
-     * The opponent team plays with BLACK coins (9 coins).
-     * On alternating boards, the break rotates, so the other team/player breaks and plays White.
-     */
-    fun getTeamColorForBoard(teamId: Int, boardNum: Int = currentBoardNumber): TeamColor {
-        val breakerTeamId = getBreakingTeamIdForBoard(boardNum)
-        return if (teamId == breakerTeamId) TeamColor.WHITE else TeamColor.BLACK
-    }
+    val rotationOrder: List<Player>
+        get() = config.buildRotationOrder()
 
     val currentPlayer: Player
         get() {
             val order = rotationOrder
             if (order.isEmpty()) return Player(1, "Player 1")
-            val index = ((turnState.currentTurnIndexInRotation % order.size) + order.size) % order.size
-            return order[index]
+            val idx = turnState.currentTurnIndexInRotation % order.size
+            return order[idx]
         }
 
     val nextPlayer: Player
         get() {
             val order = rotationOrder
             if (order.isEmpty()) return Player(1, "Player 1")
-            val nextIndex = (((turnState.currentTurnIndexInRotation + 1) % order.size) + order.size) % order.size
-            return order[nextIndex]
+            val nextIdx = (turnState.currentTurnIndexInRotation + 1) % order.size
+            return order[nextIdx]
         }
 
     val currentTeamId: Int
@@ -255,12 +228,32 @@ data class GameState(
     val currentTeamName: String
         get() = if (currentTeamId == 1) config.team1Name else config.team2Name
 
-    val nextTeamName: String
-        get() = if (nextTeamId == 1) config.team1Name else config.team2Name
+    fun getBreakingTeamIdForBoard(boardNumber: Int): Int {
+        val order = rotationOrder
+        if (order.isEmpty()) return 1
+        val breakerIndex = (boardNumber - 1) % order.size
+        val breaker = order[breakerIndex]
+        return config.getPlayerTeamId(breaker)
+    }
+
+    fun getBreakerForBoard(boardNumber: Int): Player {
+        val order = rotationOrder
+        if (order.isEmpty()) return Player(1, "Player 1")
+        val breakerIndex = (boardNumber - 1) % order.size
+        return order[breakerIndex]
+    }
+
+    val currentBoardBreaker: Player
+        get() = getBreakerForBoard(currentBoardNumber)
+
+    val currentBoardBreakingTeamId: Int
+        get() = getBreakingTeamIdForBoard(currentBoardNumber)
+
+    fun getTeamColorForBoard(teamId: Int, boardNumber: Int = currentBoardNumber): TeamColor {
+        val breakingTeamId = getBreakingTeamIdForBoard(boardNumber)
+        return if (teamId == breakingTeamId) TeamColor.WHITE else TeamColor.BLACK
+    }
 
     val currentTeamColor: TeamColor
         get() = getTeamColorForBoard(currentTeamId, currentBoardNumber)
-
-    val nextTeamColor: TeamColor
-        get() = getTeamColorForBoard(nextTeamId, currentBoardNumber)
 }

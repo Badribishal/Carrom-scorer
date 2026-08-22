@@ -5,7 +5,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircleOutline
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material3.*
@@ -47,7 +46,7 @@ fun RulesDialog(onDismiss: () -> Unit) {
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Carrom Match Rules",
+                            text = "Official Carrom Rules",
                             style = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold
                         )
@@ -66,38 +65,43 @@ fun RulesDialog(onDismiss: () -> Unit) {
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     RuleSection(
-                        title = "1. Break & Team Assignment",
-                        content = "The team that breaks first plays White coins (9 White). The opposing team plays Black coins (9 Black). There is 1 Queen in the center. Total 19 coins."
+                        title = "1. Break & Team Colors",
+                        content = "The player/team taking the opening break plays White coins (9 White). The opposing team plays Black coins (9 Black). There is 1 Queen in the center circle. Total 19 coins."
                     )
 
                     RuleSection(
                         title = "2. Turn & Hand System",
-                        content = "A Turn belongs to 1 player. During a single turn, the player can pocket multiple coins (+White, +Black), pocket the Queen, and score penalties.\nA Hand is completed when every player in the rotation has completed their turn."
+                        content = "A Turn belongs to one active player until their turn ends. A Hand is completed when every player in the rotation has completed their turn."
                     )
 
                     RuleSection(
                         title = "3. Board Scoring",
-                        content = "A board ends when one team clears all 9 of their colour coins. The winning team receives points equal to the opposing team's remaining coins on the board."
+                        content = "A board ends when one team pockets all 9 of their assigned colour coins. The winning team receives 1 point per remaining opponent coin on the board."
                     )
 
                     RuleSection(
                         title = "4. Queen & Cover Rules (5 Points)",
-                        content = "The Queen is worth 5 points. When pocketed, it enters 'Pending Cover'. The player MUST pocket their team's colour coin during the SAME turn to cover it.\nIf the turn ends before covering, the Queen returns to the board as Available. The Queen can only be counted once per board."
+                        content = "The Queen is worth 5 points. To successfully claim the Queen, a player must pocket the Queen and cover it with one of their team's own colour coins during the SAME turn. If the turn ends without covering, the Queen returns to the center."
                     )
 
                     RuleSection(
-                        title = "5. 24+ Queen Rule",
-                        content = "Once a team has reached 24 points or more in cumulative match score, Queen points are no longer added toward the 29-point target."
+                        title = "5. 19-Point Rule (Official ICF Regulation)",
+                        content = "Once a team has reached 19 points or higher in cumulative match score, Queen bonus points (+5) are NO LONGER credited to that team's score upon winning a board. The team can only score points from opponent remaining coins on the board."
                     )
 
                     RuleSection(
                         title = "6. 29-Point Winning Target",
-                        content = "A match is played up to 29 points. The first team to reach 29 points or higher (e.g. 30) wins the match."
+                        content = "A regulation match is played up to 29 points. The first team to reach or exceed 29 points wins the match."
                     )
 
                     RuleSection(
-                        title = "7. Nill Board Rule (Threshold = 7)",
-                        content = "If one team wins a board while the opposing team has not reached at least 7 points in total, the losing team is marked with a Nill Board result."
+                        title = "7. Nill Board Match Win Rule (19+ vs <7 Points)",
+                        content = "If a team reaches 19 or more points (with or without Queen) while the opposing team has failed to score at least 7 points (score < 7), the team with 19+ points immediately wins the match by Nill Board victory (and vice versa)."
+                    )
+
+                    RuleSection(
+                        title = "8. Penalties & Fouls",
+                        content = "Pocketing the striker or improper shots incur a penalty coin (Due), returning a coin to the center circle."
                     )
                 }
 
@@ -105,6 +109,7 @@ fun RulesDialog(onDismiss: () -> Unit) {
 
                 Button(
                     onClick = onDismiss,
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text("Got It")
@@ -115,25 +120,29 @@ fun RulesDialog(onDismiss: () -> Unit) {
 }
 
 @Composable
-private fun RuleSection(title: String, content: String) {
+private fun RuleSection(
+    title: String,
+    content: String
+) {
     Card(
+        shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
         ),
-        shape = RoundedCornerShape(12.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
             )
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(6.dp))
             Text(
                 text = content,
                 style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 lineHeight = 20.sp
             )
         }

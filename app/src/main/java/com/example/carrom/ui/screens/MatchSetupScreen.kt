@@ -1,19 +1,23 @@
 package com.example.carrom.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
@@ -43,7 +47,8 @@ fun MatchSetupScreen(
         targetPoints: Int,
         nillBoardThreshold: Int,
         queenPoints: Int,
-        enable24PlusQueenRule: Boolean
+        queenStopThreshold: Int,
+        enableQueenStopRule: Boolean
     ) -> Unit
 ) {
     var isDoubles by remember { mutableStateOf(true) }
@@ -51,16 +56,17 @@ fun MatchSetupScreen(
     var team2Name by remember { mutableStateOf("Team 2") }
 
     var t1p1Name by remember { mutableStateOf(savedPlayers.getOrNull(0)?.name ?: "Player 1") }
-    var t1p2Name by remember { mutableStateOf(savedPlayers.getOrNull(1)?.name ?: "Player 2") }
-    var t2p1Name by remember { mutableStateOf(savedPlayers.getOrNull(2)?.name ?: "Player 3") }
+    var t1p2Name by remember { mutableStateOf(savedPlayers.getOrNull(2)?.name ?: "Player 3") }
+    var t2p1Name by remember { mutableStateOf(savedPlayers.getOrNull(1)?.name ?: "Player 2") }
     var t2p2Name by remember { mutableStateOf(savedPlayers.getOrNull(3)?.name ?: "Player 4") }
 
-    // Breaker Selection: index 0 = T1P1, 1 = T1P2, 2 = T2P1, 3 = T2P2
+    // Breaker Selection: index 0 = T1P1 (Player 1), 1 = T2P1 (Player 2), 2 = T1P2 (Player 3), 3 = T2P2 (Player 4)
     var selectedBreakerIndex by remember { mutableIntStateOf(0) }
 
     var proMode by remember { mutableStateOf(true) }
     var targetPoints by remember { mutableIntStateOf(29) }
-    var enable24PlusQueenRule by remember { mutableStateOf(true) }
+    var queenStopThreshold by remember { mutableIntStateOf(19) }
+    var enableQueenStopRule by remember { mutableStateOf(true) }
     var showAdvancedRules by remember { mutableStateOf(false) }
 
     val focusManager = LocalFocusManager.current
@@ -83,95 +89,20 @@ fun MatchSetupScreen(
                     containerColor = MaterialTheme.colorScheme.surface
                 )
             )
-        },
-        bottomBar = {
-            Surface(tonalElevation = 6.dp, modifier = Modifier.fillMaxWidth()) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    if (errorMessage != null) {
-                        Text(
-                            text = errorMessage ?: "",
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(bottom = 8.dp)
-                        )
-                    }
-                    Button(
-                        onClick = {
-                            val t1p1 = t1p1Name.trim()
-                            val t1p2 = t1p2Name.trim()
-                            val t2p1 = t2p1Name.trim()
-                            val t2p2 = t2p2Name.trim()
-
-                            if (t1p1.isBlank() || t2p1.isBlank() || (isDoubles && (t1p2.isBlank() || t2p2.isBlank()))) {
-                                errorMessage = "Please enter valid names for all players."
-                                return@Button
-                            }
-
-                            val t1List = if (isDoubles) {
-                                listOf(
-                                    Player(id = savedPlayers.find { it.name.equals(t1p1, true) }?.id ?: 1L, name = t1p1, avatarColorIndex = 0),
-                                    Player(id = savedPlayers.find { it.name.equals(t1p2, true) }?.id ?: 2L, name = t1p2, avatarColorIndex = 1)
-                                )
-                            } else {
-                                listOf(
-                                    Player(id = savedPlayers.find { it.name.equals(t1p1, true) }?.id ?: 1L, name = t1p1, avatarColorIndex = 0)
-                                )
-                            }
-
-                            val t2List = if (isDoubles) {
-                                listOf(
-                                    Player(id = savedPlayers.find { it.name.equals(t2p1, true) }?.id ?: 3L, name = t2p1, avatarColorIndex = 2),
-                                    Player(id = savedPlayers.find { it.name.equals(t2p2, true) }?.id ?: 4L, name = t2p2, avatarColorIndex = 3)
-                                )
-                            } else {
-                                listOf(
-                                    Player(id = savedPlayers.find { it.name.equals(t2p1, true) }?.id ?: 3L, name = t2p1, avatarColorIndex = 2)
-                                )
-                            }
-
-                            val breakerPlayerId = when (selectedBreakerIndex) {
-                                0 -> t1List[0].id
-                                1 -> if (isDoubles) t1List[1].id else t1List[0].id
-                                2 -> t2List[0].id
-                                3 -> if (isDoubles) t2List[1].id else t2List[0].id
-                                else -> t1List[0].id
-                            }
-
-                            onStartMatch(
-                                team1Name.ifBlank { "Team 1" },
-                                team2Name.ifBlank { "Team 2" },
-                                t1List,
-                                t2List,
-                                breakerPlayerId,
-                                proMode,
-                                targetPoints,
-                                7,
-                                5,
-                                enable24PlusQueenRule
-                            )
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp)
-                            .testTag("start_match_button"),
-                        shape = RoundedCornerShape(14.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Start Match", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    }
-                }
-            }
         }
     ) { innerPadding ->
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .padding(horizontal = 16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
             Spacer(modifier = Modifier.height(4.dp))
 
             // Mode Selector: Singles vs Doubles
@@ -190,7 +121,7 @@ fun MatchSetupScreen(
                     selected = !isDoubles,
                     onClick = {
                         isDoubles = false
-                        if (selectedBreakerIndex != 0 && selectedBreakerIndex != 2) {
+                        if (selectedBreakerIndex != 0 && selectedBreakerIndex != 1) {
                             selectedBreakerIndex = 0
                         }
                     },
@@ -243,7 +174,7 @@ fun MatchSetupScreen(
                     if (isDoubles) {
                         Spacer(modifier = Modifier.height(10.dp))
                         PlayerSlotSelector(
-                            label = "Player 2",
+                            label = "Player 3",
                             playerName = t1p2Name,
                             savedPlayers = savedPlayers,
                             onSelectPlayer = { t1p2Name = it },
@@ -277,8 +208,7 @@ fun MatchSetupScreen(
                         onValueChange = { team2Name = it },
                         label = { Text("Team 2 Name") },
                         singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                        keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("team2_name_input")
@@ -287,7 +217,7 @@ fun MatchSetupScreen(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     PlayerSlotSelector(
-                        label = "Player 1",
+                        label = "Player 2",
                         playerName = t2p1Name,
                         savedPlayers = savedPlayers,
                         onSelectPlayer = { t2p1Name = it },
@@ -300,7 +230,7 @@ fun MatchSetupScreen(
                     if (isDoubles) {
                         Spacer(modifier = Modifier.height(10.dp))
                         PlayerSlotSelector(
-                            label = "Player 2",
+                            label = "Player 4",
                             playerName = t2p2Name,
                             savedPlayers = savedPlayers,
                             onSelectPlayer = { t2p2Name = it },
@@ -339,14 +269,14 @@ fun MatchSetupScreen(
                     val breakerOptions = if (isDoubles) {
                         listOf(
                             Triple(0, t1p1Name, team1Name),
-                            Triple(1, t1p2Name, team1Name),
-                            Triple(2, t2p1Name, team2Name),
+                            Triple(1, t2p1Name, team2Name),
+                            Triple(2, t1p2Name, team1Name),
                             Triple(3, t2p2Name, team2Name)
                         )
                     } else {
                         listOf(
                             Triple(0, t1p1Name, team1Name),
-                            Triple(2, t2p1Name, team2Name)
+                            Triple(1, t2p1Name, team2Name)
                         )
                     }
 
@@ -444,31 +374,196 @@ fun MatchSetupScreen(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
+                        // 19-Point Rule (Standard Carrom Regulation)
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("24+ Queen Rule", fontWeight = FontWeight.Medium)
+                                Text("19-Point Queen Rule (Official ICF)", fontWeight = FontWeight.Medium)
                                 Text(
-                                    "No +5 Queen points when score >= 24",
+                                    "No Queen bonus points (+5) awarded once team score reaches >= 19 points",
                                     fontSize = 11.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             Switch(
-                                checked = enable24PlusQueenRule,
-                                onCheckedChange = { enable24PlusQueenRule = it }
+                                checked = enableQueenStopRule,
+                                onCheckedChange = { enableQueenStopRule = it },
+                                modifier = Modifier.testTag("queen_stop_rule_switch")
                             )
+                        }
+
+                        if (enableQueenStopRule) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Queen Stop Threshold", fontSize = 12.sp)
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    FilterChip(
+                                        selected = queenStopThreshold == 19,
+                                        onClick = { queenStopThreshold = 19 },
+                                        label = { Text("19 pts (Official)") }
+                                    )
+                                    FilterChip(
+                                        selected = queenStopThreshold == 24,
+                                        onClick = { queenStopThreshold = 24 },
+                                        label = { Text("24 pts") }
+                                    )
+                                }
+                            }
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            // Bottom scroll margin so content is fully accessible above floating frosted bar
+            Spacer(modifier = Modifier.height(110.dp))
+        }
+
+        // Floating Frosted Glass Card for Start Match Action
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+        ) {
+            Surface(
+                shape = RoundedCornerShape(24.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.84f),
+                border = BorderStroke(
+                    1.2.dp,
+                    Brush.linearGradient(
+                        listOf(
+                            Color.White.copy(alpha = 0.65f),
+                            Color.White.copy(alpha = 0.2f),
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
+                        )
+                    )
+                ),
+                shadowElevation = 16.dp,
+                tonalElevation = 6.dp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .shadow(
+                        elevation = 16.dp,
+                        shape = RoundedCornerShape(24.dp),
+                        spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
+                        ambientColor = Color.Black.copy(alpha = 0.25f)
+                    )
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                listOf(
+                                    Color.White.copy(alpha = 0.22f),
+                                    Color.White.copy(alpha = 0.05f)
+                                )
+                            )
+                        )
+                        .padding(horizontal = 14.dp, vertical = 10.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        if (errorMessage != null) {
+                            Text(
+                                text = errorMessage ?: "",
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(horizontal = 4.dp)
+                            )
+                        }
+                        Button(
+                            onClick = {
+                                val t1p1 = t1p1Name.trim()
+                                val t1p2 = t1p2Name.trim()
+                                val t2p1 = t2p1Name.trim()
+                                val t2p2 = t2p2Name.trim()
+
+                                if (t1p1.isBlank() || t2p1.isBlank() || (isDoubles && (t1p2.isBlank() || t2p2.isBlank()))) {
+                                    errorMessage = "Please enter valid names for all players."
+                                    return@Button
+                                }
+
+                                val t1List = if (isDoubles) {
+                                    listOf(
+                                        Player(id = savedPlayers.find { it.name.equals(t1p1, true) }?.id ?: 1L, name = t1p1, avatarColorIndex = 0),
+                                        Player(id = savedPlayers.find { it.name.equals(t1p2, true) }?.id ?: 3L, name = t1p2, avatarColorIndex = 2)
+                                    )
+                                } else {
+                                    listOf(
+                                        Player(id = savedPlayers.find { it.name.equals(t1p1, true) }?.id ?: 1L, name = t1p1, avatarColorIndex = 0)
+                                    )
+                                }
+
+                                val t2List = if (isDoubles) {
+                                    listOf(
+                                        Player(id = savedPlayers.find { it.name.equals(t2p1, true) }?.id ?: 2L, name = t2p1, avatarColorIndex = 1),
+                                        Player(id = savedPlayers.find { it.name.equals(t2p2, true) }?.id ?: 4L, name = t2p2, avatarColorIndex = 3)
+                                    )
+                                } else {
+                                    listOf(
+                                        Player(id = savedPlayers.find { it.name.equals(t2p1, true) }?.id ?: 2L, name = t2p1, avatarColorIndex = 1)
+                                    )
+                                }
+
+                                val breakerPlayerId = when (selectedBreakerIndex) {
+                                    0 -> t1List[0].id
+                                    1 -> t2List[0].id
+                                    2 -> if (isDoubles) t1List[1].id else t1List[0].id
+                                    3 -> if (isDoubles) t2List[1].id else t2List[0].id
+                                    else -> t1List[0].id
+                                }
+
+                                onStartMatch(
+                                    team1Name.ifBlank { "Team 1" },
+                                    team2Name.ifBlank { "Team 2" },
+                                    t1List,
+                                    t2List,
+                                    breakerPlayerId,
+                                    proMode,
+                                    targetPoints,
+                                    7,
+                                    5,
+                                    queenStopThreshold,
+                                    enableQueenStopRule
+                                )
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(54.dp)
+                                .shadow(
+                                    elevation = 8.dp,
+                                    shape = RoundedCornerShape(18.dp),
+                                    spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                                )
+                                .testTag("start_match_button"),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary
+                            ),
+                            shape = RoundedCornerShape(18.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(22.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Start Match", fontWeight = FontWeight.Black, fontSize = 16.sp, letterSpacing = 0.3.sp)
+                        }
+                    }
+                }
+            }
         }
     }
+}
 
     // Add Player Dialog
     if (showAddPlayerDialogForSlot != null) {
@@ -478,47 +573,52 @@ fun MatchSetupScreen(
                 focusManager.clearFocus()
                 showAddPlayerDialogForSlot = null
             },
-            title = { Text("Add / Enter Player Name") },
+            title = { Text("Add New Player") },
             text = {
-                OutlinedTextField(
-                    value = newPlayerInputName,
-                    onValueChange = { newPlayerInputName = it },
-                    label = { Text("Player Name") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = {
-                        keyboardController?.hide()
-                        focusManager.clearFocus()
-                    }),
-                    modifier = Modifier.fillMaxWidth()
-                )
+                Column {
+                    OutlinedTextField(
+                        value = newPlayerInputName,
+                        onValueChange = { newPlayerInputName = it },
+                        label = { Text("Player Name") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = {
+                            if (newPlayerInputName.isNotBlank()) {
+                                when (showAddPlayerDialogForSlot) {
+                                    0 -> t1p1Name = newPlayerInputName.trim()
+                                    1 -> t1p2Name = newPlayerInputName.trim()
+                                    2 -> t2p1Name = newPlayerInputName.trim()
+                                    3 -> t2p2Name = newPlayerInputName.trim()
+                                }
+                                showAddPlayerDialogForSlot = null
+                            }
+                        }),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("add_player_dialog_name_input")
+                    )
+                }
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        keyboardController?.hide()
-                        focusManager.clearFocus()
-                        val name = newPlayerInputName.trim()
-                        if (name.isNotBlank()) {
+                        if (newPlayerInputName.isNotBlank()) {
                             when (showAddPlayerDialogForSlot) {
-                                0 -> t1p1Name = name
-                                1 -> t1p2Name = name
-                                2 -> t2p1Name = name
-                                3 -> t2p2Name = name
+                                0 -> t1p1Name = newPlayerInputName.trim()
+                                1 -> t1p2Name = newPlayerInputName.trim()
+                                2 -> t2p1Name = newPlayerInputName.trim()
+                                3 -> t2p2Name = newPlayerInputName.trim()
                             }
                             showAddPlayerDialogForSlot = null
                         }
-                    }
+                    },
+                    modifier = Modifier.testTag("confirm_add_player_button")
                 ) {
-                    Text("Select")
+                    Text("Add")
                 }
             },
             dismissButton = {
-                TextButton(onClick = {
-                    keyboardController?.hide()
-                    focusManager.clearFocus()
-                    showAddPlayerDialogForSlot = null
-                }) {
+                TextButton(onClick = { showAddPlayerDialogForSlot = null }) {
                     Text("Cancel")
                 }
             }
@@ -536,54 +636,69 @@ private fun PlayerSlotSelector(
 ) {
     var expanded by remember { mutableStateOf(false) }
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        PlayerAvatar(name = playerName, size = 36.dp)
-        Spacer(modifier = Modifier.width(10.dp))
-        Box(modifier = Modifier.weight(1f)) {
-            OutlinedButton(
-                onClick = { expanded = true },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(10.dp)
+    Column {
+        Text(text = label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(modifier = Modifier.height(4.dp))
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surface,
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { expanded = true }
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(text = playerName, fontWeight = FontWeight.SemiBold)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        PlayerAvatar(name = playerName, size = 26.dp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(text = playerName, fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                    }
                     Icon(imageVector = Icons.Default.ArrowDropDown, contentDescription = null)
                 }
-            }
 
-            DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false }
-            ) {
-                DropdownMenuItem(
-                    text = { Text("+ Type / Add New Player", fontWeight = FontWeight.Bold) },
-                    onClick = {
-                        expanded = false
-                        onAddNew()
-                    },
-                    leadingIcon = { Icon(Icons.Default.PersonAdd, contentDescription = null) }
-                )
-                if (savedPlayers.isNotEmpty()) {
-                    HorizontalDivider()
-                    savedPlayers.forEach { sp ->
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    savedPlayers.forEach { player ->
                         DropdownMenuItem(
-                            text = { Text(sp.name) },
-                            onClick = {
-                                expanded = false
-                                onSelectPlayer(sp.name)
+                            text = {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    PlayerAvatar(name = player.name, avatarColorIndex = player.avatarColorIndex, size = 22.dp)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(player.name)
+                                }
                             },
-                            leadingIcon = {
-                                PlayerAvatar(name = sp.name, avatarColorIndex = sp.avatarColorIndex, size = 24.dp)
+                            onClick = {
+                                onSelectPlayer(player.name)
+                                expanded = false
                             }
                         )
                     }
+                    HorizontalDivider()
+                    DropdownMenuItem(
+                        text = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Add New Player", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                            }
+                        },
+                        onClick = {
+                            expanded = false
+                            onAddNew()
+                        }
+                    )
                 }
             }
         }

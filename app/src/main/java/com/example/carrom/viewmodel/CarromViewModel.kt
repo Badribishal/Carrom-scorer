@@ -50,7 +50,8 @@ class CarromViewModel(application: Application) : AndroidViewModel(application) 
         targetPoints: Int = 29,
         nillBoardThreshold: Int = 7,
         queenPoints: Int = 5,
-        enable24PlusQueenRule: Boolean = true
+        queenStopThreshold: Int = 19,
+        enableQueenStopRule: Boolean = true
     ) {
         val config = MatchConfig(
             team1Name = team1Name.ifBlank { "Team 1" },
@@ -62,7 +63,8 @@ class CarromViewModel(application: Application) : AndroidViewModel(application) 
             targetPoints = targetPoints,
             nillBoardThreshold = nillBoardThreshold,
             queenPoints = queenPoints,
-            enable24PlusQueenRule = enable24PlusQueenRule
+            queenStopThreshold = queenStopThreshold,
+            enableQueenStopRule = enableQueenStopRule
         )
 
         val initialState = GameState(
@@ -87,24 +89,18 @@ class CarromViewModel(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch {
             // Ensure players exist in DB with unique entities
             val finalT1 = team1Players.mapIndexed { idx, p ->
-                val fallbackName = if (p.name.isNotBlank()) p.name else "Player ${idx + 1}"
-                val entity = repository.getOrCreatePlayer(fallbackName, p.avatarColorIndex)
-                Player(id = entity.id, name = entity.name, avatarColorIndex = entity.avatarColorIndex)
-            }
-            val finalT2 = team2Players.mapIndexed { idx, p ->
-                val fallbackName = if (p.name.isNotBlank()) p.name else "Player ${idx + 3}"
-                val entity = repository.getOrCreatePlayer(fallbackName, p.avatarColorIndex)
+                val entity = repository.getOrCreatePlayer(p.name, idx)
                 Player(id = entity.id, name = entity.name, avatarColorIndex = entity.avatarColorIndex)
             }
 
-            // Find matching breaker ID
-            val allOriginal = team1Players + team2Players
+            val finalT2 = team2Players.mapIndexed { idx, p ->
+                val entity = repository.getOrCreatePlayer(p.name, idx + 2)
+                Player(id = entity.id, name = entity.name, avatarColorIndex = entity.avatarColorIndex)
+            }
+
             val allFinal = finalT1 + finalT2
-            val originalBreaker = allOriginal.find { it.id == firstBreakerPlayerId }
-            val finalBreakerId = if (originalBreaker != null) {
-                allFinal.find { it.name.equals(originalBreaker.name, ignoreCase = true) }?.id
-                    ?: allFinal.find { it.id == firstBreakerPlayerId }?.id
-                    ?: finalT1.firstOrNull()?.id ?: 1L
+            val finalBreakerId = if (firstBreakerPlayerId > 0) {
+                allFinal.find { it.id == firstBreakerPlayerId }?.id ?: finalT1.firstOrNull()?.id ?: 1L
             } else {
                 allFinal.find { it.id == firstBreakerPlayerId }?.id ?: finalT1.firstOrNull()?.id ?: 1L
             }
@@ -125,72 +121,76 @@ class CarromViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun resumeMatch(state: GameState) {
-        val newEngine = CarromGameEngine(state)
-        engine = newEngine
-        _liveGameState.value = state
+    fun resumeMatch(match: GameState) {
+        engine = CarromGameEngine(match)
+        _liveGameState.value = match
     }
 
     fun pocketWhite() {
-        val currentEngine = engine ?: return
-        val updated = currentEngine.pocketWhite()
-        _liveGameState.value = updated
-        persistState(updated)
+        val eng = engine ?: return
+        val newState = eng.pocketWhite()
+        _liveGameState.value = newState
+        persistLiveState(newState)
     }
 
     fun pocketBlack() {
-        val currentEngine = engine ?: return
-        val updated = currentEngine.pocketBlack()
-        _liveGameState.value = updated
-        persistState(updated)
+        val eng = engine ?: return
+        val newState = eng.pocketBlack()
+        _liveGameState.value = newState
+        persistLiveState(newState)
     }
 
     fun pocketQueen() {
-        val currentEngine = engine ?: return
-        val updated = currentEngine.pocketQueen()
-        _liveGameState.value = updated
-        persistState(updated)
+        val eng = engine ?: return
+        val newState = eng.pocketQueen()
+        _liveGameState.value = newState
+        persistLiveState(newState)
     }
 
     fun recordPenalty() {
-        val currentEngine = engine ?: return
-        val updated = currentEngine.recordPenalty()
-        _liveGameState.value = updated
-        persistState(updated)
+        val eng = engine ?: return
+        val newState = eng.recordPenalty()
+        _liveGameState.value = newState
+        persistLiveState(newState)
     }
 
     fun undo() {
-        val currentEngine = engine ?: return
-        val updated = currentEngine.undo()
-        _liveGameState.value = updated
-        persistState(updated)
+        val eng = engine ?: return
+        val newState = eng.undo()
+        _liveGameState.value = newState
+        persistLiveState(newState)
     }
 
     fun endTurn() {
-        val currentEngine = engine ?: return
-        val updated = currentEngine.endTurn()
-        _liveGameState.value = updated
-        persistState(updated)
+        val eng = engine ?: return
+        val newState = eng.endTurn()
+        _liveGameState.value = newState
+        persistLiveState(newState)
     }
 
     fun dismissBoardResultDialog() {
-        val currentEngine = engine ?: return
-        val updated = currentEngine.dismissBoardResultDialog()
-        _liveGameState.value = updated
-        persistState(updated)
+        val eng = engine ?: return
+        val newState = eng.dismissBoardResultDialog()
+        _liveGameState.value = newState
+        persistLiveState(newState)
+    }
+
+    fun dismissBoardDialog() {
+        dismissBoardResultDialog()
     }
 
     fun startNextBoard() {
-        val currentEngine = engine ?: return
-        val updated = currentEngine.startNextBoard()
-        _liveGameState.value = updated
-        persistState(updated)
+        val eng = engine ?: return
+        val newState = eng.startNextBoard()
+        _liveGameState.value = newState
+        persistLiveState(newState)
     }
 
     fun finishAndSaveMatch() {
-        val state = _liveGameState.value ?: return
+        val current = _liveGameState.value ?: return
         viewModelScope.launch {
-            repository.finalizeAndSaveMatch(state)
+            repository.finalizeAndSaveMatch(current)
+            repository.clearActiveMatch()
             _liveGameState.value = null
             engine = null
         }
@@ -204,19 +204,19 @@ class CarromViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    private fun persistState(state: GameState) {
+    fun clearLiveState() {
+        _liveGameState.value = null
+        engine = null
+    }
+
+    private fun persistLiveState(state: GameState) {
         viewModelScope.launch {
             if (state.isMatchOver) {
-                repository.saveActiveMatch(state)
+                repository.finalizeAndSaveMatch(state)
+                repository.clearActiveMatch()
             } else {
                 repository.saveActiveMatch(state)
             }
-        }
-    }
-
-    fun addNewPlayer(name: String, avatarColorIndex: Int) {
-        viewModelScope.launch {
-            repository.insertPlayer(name, avatarColorIndex)
         }
     }
 }

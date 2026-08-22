@@ -302,8 +302,9 @@ class CarromGameEngine(
 
         if (queenCoveredByTeam == winningTeamId && board.queenStatus == QueenStatus.COVERED) {
             val teamScoreBeforeBoard = if (winningTeamId == 1) _state.team1Score else _state.team2Score
-            // 24+ Queen rule check: Once team score >= 24, Queen points are no longer added
-            if (_state.config.enable24PlusQueenRule && teamScoreBeforeBoard >= 24) {
+            // 19-Point Rule (Official ICF Rule): Once a team reaches or crosses 19 (or configured threshold) points, no premium Queen points are credited to their score.
+            val threshold = _state.config.queenStopThreshold
+            if (_state.config.enableQueenStopRule && teamScoreBeforeBoard >= threshold) {
                 queenPointsAwarded = 0
             } else {
                 queenPointsAwarded = _state.config.queenPoints
@@ -319,9 +320,23 @@ class CarromGameEngine(
         val losingTeamScore = if (winningTeamId == 1) _state.team2Score else _state.team1Score
         val isNillBoard = losingTeamScore < _state.config.nillBoardThreshold
 
-        val winningTeamFinalScore = if (winningTeamId == 1) newTeam1Score else newTeam2Score
-        val isMatchWon = winningTeamFinalScore >= _state.config.targetPoints
-        val matchWinnerId = if (isMatchWon) winningTeamId else null
+        // Match victory conditions:
+        // 1. Target points reached (e.g. 29 points or 25 points)
+        // 2. Nill Board Victory (19+ vs <7 Rule): If a team reaches or scores 19 or higher (queenStopThreshold)
+        //    while the opponent fails to reach at least 7 points (nillBoardThreshold), that team wins the match immediately.
+        val team1NillWin = newTeam1Score >= _state.config.queenStopThreshold && newTeam2Score < _state.config.nillBoardThreshold
+        val team2NillWin = newTeam2Score >= _state.config.queenStopThreshold && newTeam1Score < _state.config.nillBoardThreshold
+
+        val team1TargetWin = newTeam1Score >= _state.config.targetPoints
+        val team2TargetWin = newTeam2Score >= _state.config.targetPoints
+
+        val isMatchWon = team1TargetWin || team2TargetWin || team1NillWin || team2NillWin
+        val matchWinnerId = when {
+            team1TargetWin || team1NillWin -> 1
+            team2TargetWin || team2NillWin -> 2
+            else -> null
+        }
+        val isWonByNillRule = (team1NillWin && matchWinnerId == 1) || (team2NillWin && matchWinnerId == 2)
 
         val currentBreaker = _state.getBreakerForBoard(_state.currentBoardNumber)
         val boardRecord = BoardRecord(
@@ -339,6 +354,7 @@ class CarromGameEngine(
             queenPointsAwarded = queenPointsAwarded,
             boardScore = boardScore,
             isNillBoard = isNillBoard,
+            isNillMatchWin = isWonByNillRule,
             team1ScoreAfterBoard = newTeam1Score,
             team2ScoreAfterBoard = newTeam2Score,
             handsPlayed = _state.turnState.currentHand,
@@ -359,6 +375,7 @@ class CarromGameEngine(
             completedBoards = _state.completedBoards + boardRecord,
             isMatchOver = isMatchWon,
             matchWinnerTeamId = matchWinnerId,
+            isWonByNillRule = isWonByNillRule,
             endTime = if (isMatchWon) System.currentTimeMillis() else null,
             currentBoardResultDialog = boardRecord
         )

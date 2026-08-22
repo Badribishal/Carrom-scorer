@@ -3,7 +3,7 @@ package com.example
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import com.example.carrom.ui.screens.HomeScreen
-import com.example.ui.theme.CarromTheme
+import com.example.ui.theme.CarromScoreboardTheme
 import com.github.takahirom.roborazzi.RobolectricDeviceQualifiers
 import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Rule
@@ -23,7 +23,7 @@ class GreetingScreenshotTest {
     @Test
     fun home_screen_screenshot() {
         composeTestRule.setContent {
-            CarromTheme {
+            CarromScoreboardTheme {
                 HomeScreen(
                     activeMatch = null,
                     onResumeMatch = {},

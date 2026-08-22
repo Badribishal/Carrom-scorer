@@ -10,11 +10,15 @@ import com.example.carrom.engine.Player
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
+import java.util.Collections
+
 class CarromRepository(private val database: CarromDatabase) {
 
     private val playerDao = database.playerDao()
     private val matchDao = database.matchDao()
     private val activeMatchDao = database.activeMatchDao()
+
+    private val finalizedMatchIds = Collections.synchronizedSet(mutableSetOf<Long>())
 
     val allPlayers: Flow<List<PlayerEntity>> = playerDao.getAllPlayers()
     val allMatches: Flow<List<MatchEntity>> = matchDao.getAllMatches()
@@ -123,7 +127,14 @@ class CarromRepository(private val database: CarromDatabase) {
         )
 
         matchDao.insertMatch(matchEntity)
-        updatePlayerStats(state)
+
+        // Only update player stats once per unique matchId to prevent double counting
+        val isFirstFinalization = synchronized(finalizedMatchIds) {
+            finalizedMatchIds.add(state.matchId)
+        }
+        if (isFirstFinalization) {
+            updatePlayerStats(state)
+        }
         clearActiveMatch()
     }
 
