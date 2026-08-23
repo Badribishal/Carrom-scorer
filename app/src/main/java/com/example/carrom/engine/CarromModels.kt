@@ -40,7 +40,7 @@ data class MatchConfig(
     val targetPoints: Int = 29,
     val nillBoardThreshold: Int = 7,
     val queenPoints: Int = 5,
-    val queenStopThreshold: Int = 19, // Queen points cease once team reaches threshold (standard 19 pts or 24 pts)
+    val queenStopThreshold: Int = 24, // Queen points cease once team reaches threshold (standard 24 pts)
     val enableQueenStopRule: Boolean = true // Flag to toggle the threshold rule
 ) {
     val isDoubles: Boolean

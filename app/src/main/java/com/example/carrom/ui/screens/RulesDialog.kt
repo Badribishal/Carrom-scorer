@@ -85,8 +85,8 @@ fun RulesDialog(onDismiss: () -> Unit) {
                     )
 
                     RuleSection(
-                        title = "5. 19-Point Rule (Official ICF Regulation)",
-                        content = "Once a team has reached 19 points or higher in cumulative match score, Queen bonus points (+5) are NO LONGER credited to that team's score upon winning a board. The team can only score points from opponent remaining coins on the board."
+                        title = "5. 24-Point Queen Cutoff Rule",
+                        content = "Once a team has reached 24 points or higher in cumulative match score, Queen bonus points (+5) are NO LONGER credited to that team's score upon winning a board. The team can only score points from opponent remaining coins on the board."
                     )
 
                     RuleSection(
@@ -95,8 +95,8 @@ fun RulesDialog(onDismiss: () -> Unit) {
                     )
 
                     RuleSection(
-                        title = "7. Nill Board Match Win Rule (19+ vs <7 Points)",
-                        content = "If a team reaches 19 or more points (with or without Queen) while the opposing team has failed to score at least 7 points (score < 7), the team with 19+ points immediately wins the match by Nill Board victory (and vice versa)."
+                        title = "7. Nill Board Match Win Rule",
+                        content = "If a team reaches winning threshold (24+ points) while the opposing team has failed to score at least 7 points (score < 7), the leading team immediately wins the match by Nill Board victory."
                     )
 
                     RuleSection(

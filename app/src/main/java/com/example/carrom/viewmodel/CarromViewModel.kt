@@ -50,7 +50,7 @@ class CarromViewModel(application: Application) : AndroidViewModel(application) 
         targetPoints: Int = 29,
         nillBoardThreshold: Int = 7,
         queenPoints: Int = 5,
-        queenStopThreshold: Int = 19,
+        queenStopThreshold: Int = 24,
         enableQueenStopRule: Boolean = true
     ) {
         val config = MatchConfig(

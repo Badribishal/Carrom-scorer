@@ -74,7 +74,7 @@ fun MatchSetupScreen(
 
     var proMode by rememberSaveable { mutableStateOf(true) }
     var targetPoints by rememberSaveable { mutableIntStateOf(29) }
-    var queenStopThreshold by rememberSaveable { mutableIntStateOf(19) }
+    var queenStopThreshold by rememberSaveable { mutableIntStateOf(24) }
     var enableQueenStopRule by rememberSaveable { mutableStateOf(true) }
     var showAdvancedRules by rememberSaveable { mutableStateOf(false) }
 
@@ -450,7 +450,7 @@ fun MatchSetupScreen(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text("Pro Match Mode", fontWeight = FontWeight.SemiBold)
                                 Text(
-                                    text = if (proMode) "29-pt Target or 8 Boards limit" else "Standard Casual Match (25-pt Target)",
+                                    text = if (proMode) "29-pt Target • Unlimited Boards until Target" else "Standard Casual Match (25-pt Target)",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -500,9 +500,9 @@ fun MatchSetupScreen(
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text("19-Point Queen Stop Rule (ICF)", fontWeight = FontWeight.Medium, fontSize = 14.sp)
+                                        Text("24-Point Queen Cutoff Rule", fontWeight = FontWeight.Medium, fontSize = 14.sp)
                                         Text(
-                                            "No +5 queen bonus when team reaches 19 points",
+                                            "After reaching 24 points, Queen bonus (+5) is not counted",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )

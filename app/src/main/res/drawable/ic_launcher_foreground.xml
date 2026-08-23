@@ -4,44 +4,8 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
-    <!-- Pure Navy Blue Center Emblem Base -->
+    <!-- Bright Red Dot -->
     <path
-        android:fillColor="#0A192F"
-        android:strokeColor="#1E3A8A"
-        android:strokeWidth="1.5"
-        android:pathData="M54,54m-36,0a36,36 0,1,1 72,0a36,36 0,1,1 -72,0" />
-
-    <!-- Outer Carrom Precision Ring (Translucent Navy/Sky) -->
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#38BDF8"
-        android:strokeAlpha="0.35"
-        android:strokeWidth="1.2"
-        android:pathData="M54,54m-26,0a26,26 0,1,1 52,0a26,26 0,1,1 -52,0" />
-
-    <!-- Inner Board Center Ring -->
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#60A5FA"
-        android:strokeAlpha="0.5"
-        android:strokeWidth="1.0"
-        android:pathData="M54,54m-16,0a16,16 0,1,1 32,0a16,16 0,1,1 -32,0" />
-
-    <!-- Queen Red Glow Base -->
-    <path
-        android:fillColor="#88FF1744"
-        android:pathData="M54,54m-9,0a9,9 0,1,1 18,0a9,9 0,1,1 -18,0" />
-
-    <!-- Pure Vibrant Queen Red Dot in Center -->
-    <path
-        android:fillColor="#E53935"
-        android:strokeColor="#FFCDD2"
-        android:strokeWidth="0.8"
-        android:pathData="M54,54m-7,0a7,7 0,1,1 14,0a7,7 0,1,1 -14,0" />
-
-    <!-- Center Specular Highlight -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:fillAlpha="0.8"
-        android:pathData="M51.8,51.8m-2,0a2,2 0,1,1 4,0a2,2 0,1,1 -4,0" />
+        android:fillColor="#FF0000"
+        android:pathData="M54,54m-11,0a11,11 0,1,1 22,0a11,11 0,1,1 -22,0" />
 </vector>

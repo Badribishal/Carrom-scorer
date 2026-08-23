@@ -302,7 +302,7 @@ class CarromGameEngine(
 
         if (queenCoveredByTeam == winningTeamId && board.queenStatus == QueenStatus.COVERED) {
             val teamScoreBeforeBoard = if (winningTeamId == 1) _state.team1Score else _state.team2Score
-            // 19-Point Rule (Official ICF Rule): Once a team reaches or crosses 19 (or configured threshold) points, no premium Queen points are credited to their score.
+            // 24-Point Queen Cutoff Rule: Once a team reaches or crosses 24 (or configured threshold) points, no premium Queen points are credited to their score.
             val threshold = _state.config.queenStopThreshold
             if (_state.config.enableQueenStopRule && teamScoreBeforeBoard >= threshold) {
                 queenPointsAwarded = 0

@@ -487,7 +487,7 @@ fun SimplifiedScoreboardScreen(
                                             )
                                             Spacer(modifier = Modifier.width(6.dp))
                                             Text(
-                                                text = "19-Point Rule active: Score is already >= ${config.queenStopThreshold}. No Queen bonus pts added.",
+                                                text = "24-Point Cutoff active: Score is already >= ${config.queenStopThreshold}. No Queen bonus pts added.",
                                                 fontSize = 10.sp,
                                                 fontWeight = FontWeight.Medium,
                                                 color = Color(0xFFE65100)

@@ -390,14 +390,14 @@ fun SettingsScreen(
 
                     HorizontalDivider()
 
-                    // 19-Point Rule (Official ICF Rule)
+                    // 24-Point Queen Cutoff Rule
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("19-Point Queen Rule (Official ICF)", fontWeight = FontWeight.SemiBold)
+                            Text("24-Point Queen Cutoff Rule", fontWeight = FontWeight.SemiBold)
                             Text(
                                 "No Queen bonus points (+5) awarded once team reaches >= ${ruleDefaults.queenStopThreshold} points",
                                 fontSize = 11.sp,
@@ -421,14 +421,14 @@ fun SettingsScreen(
                             Text("Threshold Points", fontSize = 12.sp, fontWeight = FontWeight.Medium)
                             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                 FilterChip(
-                                    selected = ruleDefaults.queenStopThreshold == 19,
-                                    onClick = { onRulesChange(ruleDefaults.copy(queenStopThreshold = 19)) },
-                                    label = { Text("19 pts (Official)") }
-                                )
-                                FilterChip(
                                     selected = ruleDefaults.queenStopThreshold == 24,
                                     onClick = { onRulesChange(ruleDefaults.copy(queenStopThreshold = 24)) },
-                                    label = { Text("24 pts") }
+                                    label = { Text("24 pts (Active)") }
+                                )
+                                FilterChip(
+                                    selected = ruleDefaults.queenStopThreshold == 21,
+                                    onClick = { onRulesChange(ruleDefaults.copy(queenStopThreshold = 21)) },
+                                    label = { Text("21 pts") }
                                 )
                             }
                         }

@@ -117,7 +117,7 @@ fun HomeScreen(
                     Spacer(modifier = Modifier.height(4.dp))
 
                     Text(
-                        text = "29-pt Target • 19-Point Queen Rule • Real-time Rotation • Nill Board Alert",
+                        text = "29-pt Target • 24-Point Queen Cutoff • Real-time Rotation • Nill Board Alert",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodySmall,
                         textAlign = TextAlign.Center,

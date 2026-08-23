@@ -22,7 +22,7 @@ data class MatchRuleDefaults(
     val targetPoints: Int = 29,
     val nillBoardThreshold: Int = 7,
     val queenPoints: Int = 5,
-    val queenStopThreshold: Int = 19,
+    val queenStopThreshold: Int = 24,
     val enableQueenStopRule: Boolean = true,
     val defaultProMode: Boolean = true
 )
@@ -65,7 +65,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             targetPoints = prefs.getInt("target_points", 29),
             nillBoardThreshold = prefs.getInt("nill_board_threshold", 7),
             queenPoints = prefs.getInt("queen_points", 5),
-            queenStopThreshold = prefs.getInt("queen_stop_threshold", 19),
+            queenStopThreshold = prefs.getInt("queen_stop_threshold", 24),
             enableQueenStopRule = prefs.getBoolean("enable_queen_stop_rule", true),
             defaultProMode = prefs.getBoolean("default_pro_mode", true)
         )
