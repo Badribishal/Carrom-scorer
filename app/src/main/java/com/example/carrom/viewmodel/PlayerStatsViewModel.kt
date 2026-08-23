@@ -32,9 +32,39 @@ class PlayerStatsViewModel(application: Application) : AndroidViewModel(applicat
         _selectedPlayer.value = player
     }
 
-    fun addPlayer(name: String, avatarColorIndex: Int) {
+    fun addPlayer(
+        name: String,
+        avatarColorIndex: Int = 0,
+        nickname: String = "",
+        notes: String = "",
+        skillLevel: String = "Intermediate"
+    ) {
         viewModelScope.launch {
-            repository.insertPlayer(name, avatarColorIndex)
+            repository.insertPlayer(
+                name = name,
+                avatarColorIndex = avatarColorIndex,
+                nickname = nickname,
+                notes = notes,
+                skillLevel = skillLevel
+            )
+        }
+    }
+
+    fun updatePlayer(player: PlayerEntity) {
+        viewModelScope.launch {
+            repository.updatePlayer(player)
+            if (_selectedPlayer.value?.id == player.id) {
+                _selectedPlayer.value = player
+            }
+        }
+    }
+
+    fun deletePlayer(id: Long) {
+        viewModelScope.launch {
+            repository.deletePlayerById(id)
+            if (_selectedPlayer.value?.id == id) {
+                _selectedPlayer.value = null
+            }
         }
     }
 }

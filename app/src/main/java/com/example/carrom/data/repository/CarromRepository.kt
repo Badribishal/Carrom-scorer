@@ -35,7 +35,13 @@ class CarromRepository(private val database: CarromDatabase) {
         }
     }
 
-    suspend fun getOrCreatePlayer(name: String, avatarColorIndex: Int = 0): PlayerEntity {
+    suspend fun getOrCreatePlayer(
+        name: String,
+        avatarColorIndex: Int = 0,
+        nickname: String = "",
+        notes: String = "",
+        skillLevel: String = "Intermediate"
+    ): PlayerEntity {
         val trimmed = name.trim()
         val existing = playerDao.getPlayerByName(trimmed)
         if (existing != null) {
@@ -43,19 +49,51 @@ class CarromRepository(private val database: CarromDatabase) {
         }
         val newPlayer = PlayerEntity(
             name = trimmed,
-            avatarColorIndex = avatarColorIndex
+            nickname = nickname.trim(),
+            avatarColorIndex = avatarColorIndex,
+            notes = notes.trim(),
+            skillLevel = skillLevel
         )
         val id = playerDao.insertPlayer(newPlayer)
         return newPlayer.copy(id = id)
     }
 
-    suspend fun insertPlayer(name: String, avatarColorIndex: Int = 0): Long {
+    suspend fun insertPlayer(
+        name: String,
+        avatarColorIndex: Int = 0,
+        nickname: String = "",
+        notes: String = "",
+        skillLevel: String = "Intermediate"
+    ): Long {
         val trimmed = name.trim()
         val existing = playerDao.getPlayerByName(trimmed)
         if (existing != null) {
+            val updated = existing.copy(
+                avatarColorIndex = avatarColorIndex,
+                nickname = if (nickname.isNotBlank()) nickname.trim() else existing.nickname,
+                notes = if (notes.isNotBlank()) notes.trim() else existing.notes,
+                skillLevel = if (skillLevel.isNotBlank()) skillLevel else existing.skillLevel
+            )
+            playerDao.updatePlayer(updated)
             return existing.id
         }
-        return playerDao.insertPlayer(PlayerEntity(name = trimmed, avatarColorIndex = avatarColorIndex))
+        return playerDao.insertPlayer(
+            PlayerEntity(
+                name = trimmed,
+                nickname = nickname.trim(),
+                avatarColorIndex = avatarColorIndex,
+                notes = notes.trim(),
+                skillLevel = skillLevel
+            )
+        )
+    }
+
+    suspend fun updatePlayer(player: PlayerEntity) {
+        playerDao.updatePlayer(player)
+    }
+
+    suspend fun deletePlayerById(id: Long) {
+        playerDao.deletePlayerById(id)
     }
 
     suspend fun getPlayerById(id: Long): PlayerEntity? {
@@ -191,6 +229,74 @@ class CarromRepository(private val database: CarromDatabase) {
 
     suspend fun deleteMatchById(id: Long) {
         matchDao.deleteMatchById(id)
+    }
+
+    suspend fun getAllMatchesList(): List<MatchEntity> {
+        return matchDao.getAllMatchesList()
+    }
+
+    suspend fun getAllPlayersList(): List<PlayerEntity> {
+        return playerDao.getAllPlayersList()
+    }
+
+    suspend fun importFullBackup(
+        players: List<PlayerEntity>,
+        matches: List<MatchEntity>,
+        replaceAll: Boolean
+    ): Pair<Int, Int> {
+        if (replaceAll) {
+            activeMatchDao.clearActiveMatch()
+            matchDao.deleteAllMatches()
+            playerDao.deleteAllPlayers()
+        }
+
+        var playersImported = 0
+        var matchesImported = 0
+
+        // Import / merge players
+        for (player in players) {
+            val existing = playerDao.getPlayerByName(player.name)
+            if (existing == null) {
+                playerDao.insertPlayer(player.copy(id = 0L))
+                playersImported++
+            } else if (replaceAll) {
+                playerDao.insertPlayer(player)
+                playersImported++
+            } else {
+                // Merge player stats if existing
+                val merged = existing.copy(
+                    nickname = if (player.nickname.isNotBlank()) player.nickname else existing.nickname,
+                    avatarColorIndex = player.avatarColorIndex,
+                    notes = if (player.notes.isNotBlank()) player.notes else existing.notes,
+                    skillLevel = player.skillLevel,
+                    matchesPlayed = maxOf(existing.matchesPlayed, player.matchesPlayed),
+                    matchesWon = maxOf(existing.matchesWon, player.matchesWon),
+                    matchesLost = maxOf(existing.matchesLost, player.matchesLost),
+                    boardsPlayed = maxOf(existing.boardsPlayed, player.boardsPlayed),
+                    boardsWon = maxOf(existing.boardsWon, player.boardsWon),
+                    whitePocketed = maxOf(existing.whitePocketed, player.whitePocketed),
+                    blackPocketed = maxOf(existing.blackPocketed, player.blackPocketed),
+                    queenAttempts = maxOf(existing.queenAttempts, player.queenAttempts),
+                    queensCovered = maxOf(existing.queensCovered, player.queensCovered),
+                    queenPointsScored = maxOf(existing.queenPointsScored, player.queenPointsScored),
+                    penalties = maxOf(existing.penalties, player.penalties),
+                    totalPointsContributed = maxOf(existing.totalPointsContributed, player.totalPointsContributed)
+                )
+                playerDao.updatePlayer(merged)
+                playersImported++
+            }
+        }
+
+        // Import matches
+        for (match in matches) {
+            val existing = matchDao.getMatchById(match.id)
+            if (existing == null || replaceAll) {
+                matchDao.insertMatch(match)
+                matchesImported++
+            }
+        }
+
+        return Pair(playersImported, matchesImported)
     }
 
     suspend fun resetAllData() {

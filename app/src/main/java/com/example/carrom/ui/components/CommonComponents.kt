@@ -152,14 +152,13 @@ fun NavyRedDotLogo(
         remember { mutableFloatStateOf(0f) }
     }
 
-    // Ultra-smooth deep navy radial blend with rich blue specular center
-    val navyBg = Brush.radialGradient(
+    // Pure Navy Blue Background (#0A192F with subtle depth)
+    val pureNavyBg = Brush.radialGradient(
         listOf(
-            Color(0xFF2563EB), // Vibrant royal navy center
-            Color(0xFF1E40AF), // Deep navy
-            Color(0xFF1E3A8A), // Midnight navy
-            Color(0xFF0F172A), // Slate navy
-            Color(0xFF030712)  // Obsidian perimeter
+            Color(0xFF0F2744), // Rich navy center highlight
+            Color(0xFF0A192F), // Pure midnight navy
+            Color(0xFF071426), // Deep navy
+            Color(0xFF040C18)  // Obsidian navy rim
         )
     )
 
@@ -168,23 +167,22 @@ fun NavyRedDotLogo(
         modifier = modifier
             .size(size)
             .shadow(
-                elevation = (size.value * 0.16f).dp,
+                elevation = (size.value * 0.18f).dp,
                 shape = CircleShape,
-                spotColor = Color(0xFF38BDF8).copy(alpha = 0.45f),
-                ambientColor = Color.Black.copy(alpha = 0.35f)
+                spotColor = Color(0xFF0A192F).copy(alpha = 0.6f),
+                ambientColor = Color.Black.copy(alpha = 0.45f)
             )
             .clip(CircleShape)
-            .background(navyBg)
+            .background(pureNavyBg)
             .border(
-                1.5.dp,
+                (size.value * 0.045f).coerceAtLeast(1f).dp,
                 Brush.sweepGradient(
                     listOf(
-                        Color(0xFF38BDF8),
                         Color(0xFF1E3A8A),
-                        Color(0xFF60A5FA),
-                        Color(0xFF0EA5E9),
-                        Color(0xFF1D4ED8),
-                        Color(0xFF38BDF8)
+                        Color(0xFF38BDF8).copy(alpha = 0.6f),
+                        Color(0xFF1E3A8A),
+                        Color(0xFF60A5FA).copy(alpha = 0.5f),
+                        Color(0xFF1E3A8A)
                     )
                 ),
                 CircleShape
@@ -198,7 +196,7 @@ fun NavyRedDotLogo(
                     Brush.linearGradient(
                         colors = listOf(
                             Color.White.copy(alpha = 0f),
-                            Color.White.copy(alpha = 0.18f),
+                            Color.White.copy(alpha = 0.12f),
                             Color.White.copy(alpha = 0f)
                         ),
                         start = androidx.compose.ui.geometry.Offset(shimmerOffset * size.value * 2, 0f),
@@ -207,20 +205,14 @@ fun NavyRedDotLogo(
                 )
         )
 
-        // Outer concentric smooth accent ring
+        // Outer concentric smooth carrom accent ring
         Box(
             modifier = Modifier
-                .size(size * 0.70f)
+                .size(size * 0.72f)
                 .clip(CircleShape)
                 .border(
-                    1.dp,
-                    Brush.radialGradient(
-                        listOf(
-                            Color(0xFFBAE6FD).copy(alpha = 0.7f),
-                            Color(0xFF38BDF8).copy(alpha = 0.35f),
-                            Color(0xFF0284C7).copy(alpha = 0.15f)
-                        )
-                    ),
+                    0.85.dp,
+                    Color(0xFF38BDF8).copy(alpha = 0.35f),
                     CircleShape
                 )
         )
@@ -230,33 +222,43 @@ fun NavyRedDotLogo(
             modifier = Modifier
                 .size(size * 0.48f)
                 .clip(CircleShape)
-                .border(0.75.dp, Color(0xFF7DD3FC).copy(alpha = 0.4f), CircleShape)
+                .border(0.75.dp, Color(0xFF60A5FA).copy(alpha = 0.45f), CircleShape)
         )
 
-        // Center Carrom Queen Red Dot with ultra-smooth 5-stop radial gradient & glow
+        // Center Carrom Queen Red Dot with radiant glow and specular highlight
         Box(
             modifier = Modifier
-                .size(size * 0.30f)
+                .size(size * 0.32f)
                 .scale(pulseScale)
                 .shadow(
-                    elevation = 5.dp,
+                    elevation = 6.dp,
                     shape = CircleShape,
-                    spotColor = Color(0xFFFF1744).copy(alpha = 0.75f)
+                    spotColor = Color(0xFFFF1744).copy(alpha = 0.8f)
                 )
                 .clip(CircleShape)
                 .background(
                     Brush.radialGradient(
                         listOf(
                             Color(0xFFFF8A80), // Soft pink-red highlight
-                            Color(0xFFFF5252), // Bright carrom red
+                            Color(0xFFFF3D00), // Vibrant carrom red-orange
                             Color(0xFFFF1744), // Vivid scarlet
-                            Color(0xFFD50000), // Rich crimson
-                            Color(0xFF880E4F)  // Deep burgundy edge
+                            Color(0xFFD50000), // Deep crimson
+                            Color(0xFF880E4F)  // Rich burgundy edge
                         )
                     )
                 )
-                .border(0.75.dp, Color(0xFFFFEBEE).copy(alpha = 0.85f), CircleShape)
-        )
+                .border(0.85.dp, Color(0xFFFFCDD2).copy(alpha = 0.9f), CircleShape)
+        ) {
+            // Specular Queen reflection dot
+            Box(
+                modifier = Modifier
+                    .size(size * 0.08f)
+                    .align(Alignment.TopStart)
+                    .offset(x = (size.value * 0.06f).dp, y = (size.value * 0.06f).dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.75f))
+            )
+        }
     }
 }
 

@@ -4,9 +4,12 @@ import android.graphics.PixelFormat
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
+import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -18,11 +21,16 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.example.carrom.data.local.CarromJsonParser
+import com.example.carrom.data.local.entity.MatchEntity
+import com.example.carrom.ui.components.ExportDataBottomSheet
+import com.example.carrom.ui.components.ImportPreviewDialog
 import com.example.carrom.ui.screens.*
 import com.example.carrom.viewmodel.*
 import com.example.ui.theme.CarromScoreboardTheme
@@ -106,9 +114,12 @@ object Destinations {
 fun CarromAppNavigation(
     settingsViewModel: SettingsViewModel,
     carromViewModel: CarromViewModel = viewModel(),
-    historyViewModel: MatchHistoryViewModel = viewModel()
+    historyViewModel: MatchHistoryViewModel = viewModel(),
+    playerStatsViewModel: PlayerStatsViewModel = viewModel(),
+    exportViewModel: DataExportImportViewModel = viewModel()
 ) {
     val navController = rememberNavController()
+    val context = LocalContext.current
 
     val liveGameState by carromViewModel.liveGameState.collectAsStateWithLifecycle()
     val activeSavedMatch by carromViewModel.activeSavedMatch.collectAsStateWithLifecycle()
@@ -123,37 +134,66 @@ fun CarromAppNavigation(
     val themeMode by settingsViewModel.themeMode.collectAsStateWithLifecycle()
     val themePreset by settingsViewModel.themePreset.collectAsStateWithLifecycle()
 
+    val exportState by exportViewModel.uiState.collectAsStateWithLifecycle()
+
     var showGlobalRulesDialog by remember { mutableStateOf(false) }
+    var showExportSheet by remember { mutableStateOf(false) }
+    var selectedMatchForExport by remember { mutableStateOf<MatchEntity?>(null) }
+
+    // File picker launcher for JSON / CSV backups
+    val importFileLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            exportViewModel.processSelectedImportUri(context, uri)
+        }
+    }
+
+    // Feedback Toast display
+    LaunchedEffect(exportState.userMessage) {
+        exportState.userMessage?.let { msg ->
+            Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+            exportViewModel.dismissMessage()
+        }
+    }
 
     NavHost(
         navController = navController,
         startDestination = Destinations.HOME,
         enterTransition = {
-            fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing)) +
+            fadeIn(animationSpec = tween(320, easing = FastOutSlowInEasing)) +
             slideIntoContainer(
                 AnimatedContentTransitionScope.SlideDirection.Start,
-                animationSpec = tween(220, easing = FastOutSlowInEasing)
+                animationSpec = tween(340, easing = FastOutSlowInEasing),
+                initialOffset = { (it * 0.22f).toInt() }
+            ) + scaleIn(
+                initialScale = 0.95f,
+                animationSpec = tween(340, easing = FastOutSlowInEasing)
             )
         },
         exitTransition = {
-            fadeOut(animationSpec = tween(180, easing = FastOutSlowInEasing)) +
-            slideOutOfContainer(
-                AnimatedContentTransitionScope.SlideDirection.Start,
-                animationSpec = tween(180, easing = FastOutSlowInEasing)
+            fadeOut(animationSpec = tween(240, easing = FastOutSlowInEasing)) +
+            scaleOut(
+                targetScale = 0.97f,
+                animationSpec = tween(240, easing = FastOutSlowInEasing)
             )
         },
         popEnterTransition = {
-            fadeIn(animationSpec = tween(220, easing = FastOutSlowInEasing)) +
-            slideIntoContainer(
-                AnimatedContentTransitionScope.SlideDirection.End,
-                animationSpec = tween(220, easing = FastOutSlowInEasing)
+            fadeIn(animationSpec = tween(300, easing = FastOutSlowInEasing)) +
+            scaleIn(
+                initialScale = 0.97f,
+                animationSpec = tween(300, easing = FastOutSlowInEasing)
             )
         },
         popExitTransition = {
-            fadeOut(animationSpec = tween(180, easing = FastOutSlowInEasing)) +
+            fadeOut(animationSpec = tween(240, easing = FastOutSlowInEasing)) +
             slideOutOfContainer(
                 AnimatedContentTransitionScope.SlideDirection.End,
-                animationSpec = tween(180, easing = FastOutSlowInEasing)
+                animationSpec = tween(280, easing = FastOutSlowInEasing),
+                targetOffset = { (it * 0.22f).toInt() }
+            ) + scaleOut(
+                targetScale = 0.95f,
+                animationSpec = tween(280, easing = FastOutSlowInEasing)
             )
         }
     ) {
@@ -328,6 +368,10 @@ fun CarromAppNavigation(
                             popUpTo(Destinations.HOME)
                         }
                     },
+                    onShareScorecardPdf = {
+                        val matchEntity = CarromJsonParser.createMatchEntityFromGameState(currentState)
+                        exportViewModel.exportSingleMatchPdf(context, matchEntity, share = true)
+                    },
                     onHome = {
                         carromViewModel.finishAndSaveMatch()
                         navController.navigate(Destinations.HOME) {
@@ -355,6 +399,13 @@ fun CarromAppNavigation(
                 onDeleteMatch = { matchId ->
                     historyViewModel.deleteMatch(matchId)
                 },
+                onExportAll = {
+                    selectedMatchForExport = null
+                    showExportSheet = true
+                },
+                onExportMatchPdf = { matchEntity ->
+                    exportViewModel.exportSingleMatchPdf(context, matchEntity, share = true)
+                },
                 onBack = { navController.popBackStack() }
             )
         }
@@ -363,15 +414,23 @@ fun CarromAppNavigation(
         composable(Destinations.PLAYER_STATS) {
             PlayerStatsScreen(
                 players = allPlayers,
-                onAddNewPlayer = { name, colorIndex ->
-                    carromViewModel.startNewMatch(
-                        team1Name = "Team 1",
-                        team2Name = "Team 2",
-                        team1Players = emptyList(),
-                        team2Players = emptyList(),
-                        firstBreakerPlayerId = 0L,
-                        proMode = true
+                onAddNewPlayer = { name, colorIndex, nickname, notes, skillLevel ->
+                    playerStatsViewModel.addPlayer(
+                        name = name,
+                        avatarColorIndex = colorIndex,
+                        nickname = nickname,
+                        notes = notes,
+                        skillLevel = skillLevel
                     )
+                },
+                onUpdatePlayer = { player ->
+                    playerStatsViewModel.updatePlayer(player)
+                },
+                onDeletePlayer = { playerId ->
+                    playerStatsViewModel.deletePlayer(playerId)
+                },
+                onExportPlayers = {
+                    exportViewModel.exportPlayersCsv(context, share = true)
                 },
                 onBack = { navController.popBackStack() }
             )
@@ -392,6 +451,13 @@ fun CarromAppNavigation(
                 onSoundChange = { settingsViewModel.setSoundEnabled(it) },
                 onVibrationChange = { settingsViewModel.setVibrationEnabled(it) },
                 onRulesChange = { settingsViewModel.updateRuleDefaults(it) },
+                onExportData = {
+                    selectedMatchForExport = null
+                    showExportSheet = true
+                },
+                onImportData = {
+                    importFileLauncher.launch("*/*")
+                },
                 onResetAllData = {
                     settingsViewModel.resetAllData {
                         carromViewModel.clearLiveState()
@@ -411,6 +477,30 @@ fun CarromAppNavigation(
     if (showGlobalRulesDialog) {
         RulesDialog(
             onDismiss = { showGlobalRulesDialog = false }
+        )
+    }
+
+    if (showExportSheet) {
+        ExportDataBottomSheet(
+            exportViewModel = exportViewModel,
+            singleMatch = selectedMatchForExport,
+            onDismiss = {
+                showExportSheet = false
+                selectedMatchForExport = null
+            }
+        )
+    }
+
+    exportState.pendingImportPreview?.let { preview ->
+        ImportPreviewDialog(
+            preview = preview,
+            isImporting = exportState.isImporting,
+            onConfirm = { replaceExisting ->
+                exportViewModel.executeImport(replaceExisting)
+            },
+            onDismiss = {
+                exportViewModel.dismissImportPreview()
+            }
         )
     }
 }

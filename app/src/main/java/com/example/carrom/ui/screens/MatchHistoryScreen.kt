@@ -28,6 +28,7 @@ import com.example.carrom.data.local.entity.MatchEntity
 import com.example.carrom.engine.BoardRecord
 import com.example.carrom.engine.TeamColor
 import com.example.carrom.ui.components.CarromCoinBadge
+import com.example.carrom.ui.components.MatchVisualSummaryCard
 import com.example.carrom.ui.components.QueenCoinBadge
 import com.example.ui.theme.CarromQueenRed
 import com.example.carrom.viewmodel.MatchDetailData
@@ -53,6 +54,8 @@ fun MatchHistoryScreen(
     selectedMatchData: MatchDetailData?,
     onSelectMatch: (MatchEntity?) -> Unit,
     onDeleteMatch: (Long) -> Unit,
+    onExportAll: () -> Unit = {},
+    onExportMatchPdf: (MatchEntity) -> Unit = {},
     onBack: () -> Unit
 ) {
     var matchToDelete by remember { mutableStateOf<Long?>(null) }
@@ -95,6 +98,17 @@ fun MatchHistoryScreen(
                 },
                 actions = {
                     if (matches.isNotEmpty()) {
+                        IconButton(
+                            onClick = onExportAll,
+                            modifier = Modifier.testTag("export_match_history_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Share,
+                                contentDescription = "Export & Share History",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
                         IconButton(
                             onClick = {
                                 viewMode = if (viewMode == MatchViewMode.MINIMAL) MatchViewMode.DETAILED else MatchViewMode.MINIMAL
@@ -391,6 +405,37 @@ fun MatchHistoryScreen(
                 ) {
                     Text("First Breaker: ${match.firstBreakerPlayerName}", style = MaterialTheme.typography.bodyMedium)
                     Text("Mode: ${if (match.proMode) "Pro Mode" else "Standard"}", style = MaterialTheme.typography.bodyMedium)
+                }
+
+                // Quick Export & Share Single Match Scorecard
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Button(
+                        onClick = { onExportMatchPdf(match) },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(44.dp)
+                            .testTag("export_match_detail_pdf_button")
+                    ) {
+                        Icon(Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Share Scorecard PDF", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                // Visual Chart Breakdown
+                if (data.boards.isNotEmpty()) {
+                    MatchVisualSummaryCard(
+                        team1Name = match.team1Name,
+                        team2Name = match.team2Name,
+                        team1FinalScore = match.team1FinalScore,
+                        team2FinalScore = match.team2FinalScore,
+                        targetPoints = match.targetPoints,
+                        completedBoards = data.boards
+                    )
                 }
 
                 HorizontalDivider()

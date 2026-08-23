@@ -4,10 +4,8 @@
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- Pure Navy Blue Background -->
     <path
         android:pathData="M0,0h108v108h-108z"
-        android:fillColor="#070D1E" />
-    <path
-        android:pathData="M4,4h100v100h-100z"
-        android:fillColor="#0B1536" />
+        android:fillColor="#0A192F" />
 </vector>

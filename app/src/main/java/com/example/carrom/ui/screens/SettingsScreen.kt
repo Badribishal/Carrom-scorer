@@ -43,6 +43,8 @@ fun SettingsScreen(
     onSoundChange: (Boolean) -> Unit,
     onVibrationChange: (Boolean) -> Unit,
     onRulesChange: (MatchRuleDefaults) -> Unit,
+    onExportData: () -> Unit = {},
+    onImportData: () -> Unit = {},
     onResetAllData: () -> Unit,
     onOpenRulesDialog: () -> Unit,
     onBack: () -> Unit
@@ -515,9 +517,94 @@ fun SettingsScreen(
                 Text("View Full Carrom Rules Guide", color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.SemiBold)
             }
 
-            // 7. DATA MANAGEMENT
+            // 7. BACKUP, EXPORT & IMPORT SECTION
             Text(
-                text = "Data Management",
+                text = "Data Backup, Export & Import",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                ),
+                border = CardDefaults.outlinedCardBorder(),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Share,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(
+                                text = "Export & Share Statistics",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                            Text(
+                                text = "Save or share performance reports as vector PDF or CSV spreadsheets.",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Button(
+                            onClick = onExportData,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(44.dp)
+                                .testTag("export_data_settings_button"),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.Upload, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Export / Share", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        OutlinedButton(
+                            onClick = onImportData,
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(44.dp)
+                                .testTag("import_data_settings_button"),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Import / Restore", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
+            // 8. DATA MANAGEMENT
+            Text(
+                text = "Danger Zone",
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.error

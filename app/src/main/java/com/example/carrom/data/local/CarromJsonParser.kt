@@ -311,4 +311,45 @@ object CarromJsonParser {
             endTime = endTime
         )
     }
+
+    fun createMatchEntityFromGameState(state: GameState): com.example.carrom.data.local.entity.MatchEntity {
+        val config = state.config
+        val t1Players = config.team1Players.joinToString(", ") { it.name }
+        val t2Players = config.team2Players.joinToString(", ") { it.name }
+        val breakerName = config.team1Players.firstOrNull { it.id == config.firstBreakerPlayerId }?.name
+            ?: config.team2Players.firstOrNull { it.id == config.firstBreakerPlayerId }?.name
+            ?: "Unknown"
+
+        val winnerName = when (state.matchWinnerTeamId) {
+            1 -> config.team1Name
+            2 -> config.team2Name
+            else -> null
+        }
+
+        val hasNillBoard = state.completedBoards.any { it.isNillBoard }
+        val totalHands = state.completedBoards.sumOf { it.handsPlayed }
+
+        return com.example.carrom.data.local.entity.MatchEntity(
+            id = state.matchId,
+            team1Name = config.team1Name,
+            team2Name = config.team2Name,
+            team1PlayerNames = t1Players,
+            team2PlayerNames = t2Players,
+            firstBreakerPlayerId = config.firstBreakerPlayerId,
+            firstBreakerPlayerName = breakerName,
+            proMode = config.proMode,
+            team1FinalScore = state.team1Score,
+            team2FinalScore = state.team2Score,
+            winnerTeamId = state.matchWinnerTeamId,
+            winnerTeamName = winnerName,
+            boardsCount = state.completedBoards.size,
+            handsCount = totalHands,
+            targetPoints = config.targetPoints,
+            nillBoardOccurred = hasNillBoard,
+            boardDetailsJson = serializeBoardRecords(state.completedBoards),
+            turnLogsJson = serializeTurnRecords(state.allTurnLogs),
+            isCompleted = state.isMatchOver,
+            timestamp = state.endTime ?: System.currentTimeMillis()
+        )
+    }
 }

@@ -8,7 +8,10 @@ data class PlayerEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0L,
     val name: String,
+    val nickname: String = "",
     val avatarColorIndex: Int = 0,
+    val notes: String = "",
+    val skillLevel: String = "Intermediate",
     val matchesPlayed: Int = 0,
     val matchesWon: Int = 0,
     val matchesLost: Int = 0,

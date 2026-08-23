@@ -33,6 +33,7 @@ import com.example.carrom.engine.GameState
 import com.example.carrom.engine.QueenStatus
 import com.example.carrom.engine.TeamColor
 import com.example.carrom.ui.components.CarromCoinBadge
+import com.example.carrom.ui.components.MatchVisualSummaryCard
 import com.example.carrom.ui.components.NavyRedDotLogo
 import com.example.carrom.ui.components.PlayerAvatar
 import com.example.carrom.ui.components.QueenCoinBadge
@@ -45,6 +46,7 @@ fun MatchCompleteScreen(
     state: GameState,
     onSaveAndFinish: () -> Unit,
     onNewMatch: () -> Unit,
+    onShareScorecardPdf: () -> Unit = {},
     onHome: () -> Unit
 ) {
     BackHandler {
@@ -361,6 +363,16 @@ fun MatchCompleteScreen(
                     )
                 }
 
+                // 4.5 VISUAL SCORE BREAKDOWN CHART
+                MatchVisualSummaryCard(
+                    team1Name = config.team1Name,
+                    team2Name = config.team2Name,
+                    team1FinalScore = state.team1Score,
+                    team2FinalScore = state.team2Score,
+                    targetPoints = config.targetPoints,
+                    completedBoards = state.completedBoards
+                )
+
                 // 5. BOARD-BY-BOARD TRAJECTORY
                 if (state.completedBoards.isNotEmpty()) {
                     Card(
@@ -551,49 +563,71 @@ fun MatchCompleteScreen(
                             )
                             .padding(horizontal = 14.dp, vertical = 10.dp)
                     ) {
-                        Row(
+                        Column(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            OutlinedButton(
-                                onClick = onNewMatch,
+                            Button(
+                                onClick = onShareScorecardPdf,
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .height(52.dp)
-                                    .testTag("match_complete_new_match_button"),
-                                shape = RoundedCornerShape(16.dp),
-                                border = BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f))
+                                    .fillMaxWidth()
+                                    .height(48.dp)
+                                    .testTag("share_scorecard_pdf_button"),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = CarromQueenRed,
+                                    contentColor = Color.White
+                                ),
+                                shape = RoundedCornerShape(14.dp)
                             ) {
-                                Icon(imageVector = Icons.Default.Replay, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("New Match", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Icon(imageVector = Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Share Official Scorecard PDF", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                             }
 
-                            Button(
-                                onClick = {
-                                    onSaveAndFinish()
-                                    onHome()
-                                },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(52.dp)
-                                    .shadow(
-                                        elevation = 8.dp,
-                                        shape = RoundedCornerShape(16.dp),
-                                        spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-                                    )
-                                    .testTag("save_finish_match_button")
-                                    .testTag("match_complete_home_button"),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.primary,
-                                    contentColor = MaterialTheme.colorScheme.onPrimary
-                                ),
-                                shape = RoundedCornerShape(16.dp)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(imageVector = Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Done / Home", fontWeight = FontWeight.Black, fontSize = 14.sp)
+                                OutlinedButton(
+                                    onClick = onNewMatch,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(48.dp)
+                                        .testTag("match_complete_new_match_button"),
+                                    shape = RoundedCornerShape(14.dp),
+                                    border = BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f))
+                                ) {
+                                    Icon(imageVector = Icons.Default.Replay, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("New Match", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                }
+
+                                Button(
+                                    onClick = {
+                                        onSaveAndFinish()
+                                        onHome()
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(48.dp)
+                                        .shadow(
+                                            elevation = 6.dp,
+                                            shape = RoundedCornerShape(14.dp),
+                                            spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                                        )
+                                        .testTag("save_finish_match_button")
+                                        .testTag("match_complete_home_button"),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = MaterialTheme.colorScheme.primary,
+                                        contentColor = MaterialTheme.colorScheme.onPrimary
+                                    ),
+                                    shape = RoundedCornerShape(14.dp)
+                                ) {
+                                    Icon(imageVector = Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Done / Home", fontWeight = FontWeight.Black, fontSize = 13.sp)
+                                }
                             }
                         }
                     }
