@@ -330,7 +330,7 @@ fun MatchCompleteScreen(
                 // 4. KEY MATCH METRICS
                 val totalBoards = state.completedBoards.size
                 val totalHands = state.completedBoards.sumOf { it.handsPlayed }
-                val queenCovers = state.completedBoards.count { it.queenPointsAwarded > 0 }
+                val queenCovers = state.completedBoards.count { it.queenCoveredByPlayerId != null }
                 val nillBoards = state.completedBoards.count { it.isNillBoard }
 
                 Row(
@@ -350,7 +350,7 @@ fun MatchCompleteScreen(
                         modifier = Modifier.weight(1f)
                     )
                     WinnerStatChip(
-                        title = "Queens Won",
+                        title = "Queens Potted",
                         value = queenCovers.toString(),
                         icon = Icons.Default.Stars,
                         modifier = Modifier.weight(1f)
@@ -420,7 +420,7 @@ fun MatchCompleteScreen(
                                                 fontWeight = FontWeight.Bold
                                             )
                                             Text(
-                                                text = "Break: ${br.breakerPlayerName} • ${br.handsPlayed} hands",
+                                                text = "Break: ${br.breakerPlayerName}${if (br.queenCoveredByPlayerName != null) " • Queen: ${br.queenCoveredByPlayerName}" else ""} • ${br.handsPlayed} hands",
                                                 fontSize = 10.sp,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
@@ -431,7 +431,7 @@ fun MatchCompleteScreen(
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
-                                        if (br.queenPointsAwarded > 0) {
+                                        if (br.queenCoveredByPlayerId != null) {
                                             QueenCoinBadge(status = QueenStatus.COVERED, size = 18.dp)
                                         }
                                         Surface(

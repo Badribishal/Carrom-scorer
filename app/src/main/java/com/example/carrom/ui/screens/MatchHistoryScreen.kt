@@ -485,12 +485,17 @@ fun MatchHistoryScreen(
                                     fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                if (b.queenPointsAwarded > 0) {
+                                if (b.queenCoveredByPlayerName != null) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         QueenCoinBadge(size = 14.dp, isCovered = true)
                                         Spacer(modifier = Modifier.width(4.dp))
                                         Text(
-                                            text = "+5 Queen (${b.queenCoveredByPlayerName ?: "Covered"})",
+                                            text = if (b.queenCoveredByTeamId == b.winningTeamId) {
+                                                if (b.queenPointsAwarded > 0) "+${b.queenPointsAwarded} Queen (${b.queenCoveredByPlayerName})"
+                                                else "Queen: ${b.queenCoveredByPlayerName} (0 pts)"
+                                            } else {
+                                                "Queen: ${b.queenCoveredByPlayerName} (0 pts)"
+                                            },
                                             fontSize = 12.sp,
                                             color = CarromQueenRed,
                                             fontWeight = FontWeight.Bold

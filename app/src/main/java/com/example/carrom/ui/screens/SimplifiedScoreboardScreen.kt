@@ -57,11 +57,17 @@ fun SimplifiedScoreboardScreen(
     // Form states for entering the current board's result
     var selectedWinningTeamId by remember(currentBoardNumber) { mutableIntStateOf(breakerTeamId) }
     var opponentCoinsRemaining by remember(currentBoardNumber) { mutableIntStateOf(1) }
-    var isQueenCovered by remember(currentBoardNumber) { mutableStateOf(true) }
     
-    val allWinningTeamPlayers = if (selectedWinningTeamId == 1) config.team1Players else config.team2Players
-    var selectedQueenPlayerId by remember(currentBoardNumber, selectedWinningTeamId) {
-        mutableStateOf(allWinningTeamPlayers.firstOrNull()?.id)
+    // Queen possession state: null = not covered, 1 = Team 1, 2 = Team 2
+    var selectedQueenTeamId by remember(currentBoardNumber) { mutableStateOf<Int?>(breakerTeamId) }
+    var selectedQueenPlayerId by remember(currentBoardNumber, selectedQueenTeamId) {
+        mutableStateOf(
+            when (selectedQueenTeamId) {
+                1 -> config.team1Players.firstOrNull()?.id
+                2 -> config.team2Players.firstOrNull()?.id
+                else -> null
+            }
+        )
     }
 
     var showAbandonDialog by remember { mutableStateOf(false) }
@@ -73,8 +79,9 @@ fun SimplifiedScoreboardScreen(
 
     // Calculate score live preview according to official rules
     val teamScoreBeforeBoard = if (selectedWinningTeamId == 1) state.team1Score else state.team2Score
+    val isQueenCoveredByWinner = selectedQueenTeamId != null && selectedQueenTeamId == selectedWinningTeamId
     val isQueenStopApplied = config.enableQueenStopRule && teamScoreBeforeBoard >= config.queenStopThreshold
-    val queenPointsAwarded = if (isQueenCovered) {
+    val queenPointsAwarded = if (isQueenCoveredByWinner) {
         if (isQueenStopApplied) 0 else config.queenPoints
     } else 0
 
@@ -438,7 +445,7 @@ fun SimplifiedScoreboardScreen(
 
                         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
-                        // C. QUEEN RECORDING
+                        // C. QUEEN POSSESSION & BONUS RECORDING
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
@@ -446,33 +453,200 @@ fun SimplifiedScoreboardScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    QueenCoinBadge(status = QueenStatus.COVERED, size = 22.dp)
+                                    QueenCoinBadge(
+                                        status = if (selectedQueenTeamId != null) QueenStatus.COVERED else QueenStatus.AVAILABLE,
+                                        size = 22.dp
+                                    )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Column {
                                         Text(
-                                            text = "3. Queen covered by ${if (selectedWinningTeamId == 1) config.team1Name else config.team2Name}?",
+                                            text = "3. Who potted & covered the Queen?",
                                             fontSize = 12.sp,
                                             fontWeight = FontWeight.SemiBold
                                         )
                                         Text(
-                                            text = if (isQueenCovered) "+${queenPointsAwarded} pts Queen bonus" else "No Queen points",
+                                            text = when {
+                                                selectedQueenTeamId == selectedWinningTeamId && selectedQueenPlayerId != null -> {
+                                                    if (queenPointsAwarded > 0) "+$queenPointsAwarded pts Queen bonus to winner" else "Covered (24-pt cutoff: 0 bonus pts)"
+                                                }
+                                                selectedQueenTeamId != null && selectedQueenPlayerId != null -> {
+                                                    val qTeam = if (selectedQueenTeamId == 1) config.team1Name else config.team2Name
+                                                    "Covered by $qTeam (0 winner bonus pts, stats saved)"
+                                                }
+                                                else -> "Queen not covered / on board (0 pts)"
+                                            },
                                             fontSize = 10.sp,
-                                            color = if (isQueenCovered && queenPointsAwarded > 0) CarromQueenRed else MaterialTheme.colorScheme.onSurfaceVariant
+                                            color = if (queenPointsAwarded > 0) CarromQueenRed else MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
                                 }
-                                Switch(
-                                    checked = isQueenCovered,
-                                    onCheckedChange = { isQueenCovered = it },
-                                    modifier = Modifier.testTag("simplified_queen_switch")
+                            }
+
+                            // Team 1 / Team 2 / Not Covered Selector
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                // Team 1 Option
+                                FilterChip(
+                                    selected = selectedQueenTeamId == 1,
+                                    onClick = {
+                                        selectedQueenTeamId = 1
+                                        if (selectedQueenPlayerId == null || config.team1Players.none { it.id == selectedQueenPlayerId }) {
+                                            selectedQueenPlayerId = config.team1Players.firstOrNull()?.id
+                                        }
+                                    },
+                                    label = {
+                                        Text(
+                                            text = config.team1Name,
+                                            fontWeight = if (selectedQueenTeamId == 1) FontWeight.Bold else FontWeight.Normal,
+                                            fontSize = 12.sp,
+                                            maxLines = 1
+                                        )
+                                    },
+                                    leadingIcon = if (selectedQueenTeamId == 1) {
+                                        { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                                    } else null,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("simplified_queen_team1_chip")
+                                )
+
+                                // Team 2 Option
+                                FilterChip(
+                                    selected = selectedQueenTeamId == 2,
+                                    onClick = {
+                                        selectedQueenTeamId = 2
+                                        if (selectedQueenPlayerId == null || config.team2Players.none { it.id == selectedQueenPlayerId }) {
+                                            selectedQueenPlayerId = config.team2Players.firstOrNull()?.id
+                                        }
+                                    },
+                                    label = {
+                                        Text(
+                                            text = config.team2Name,
+                                            fontWeight = if (selectedQueenTeamId == 2) FontWeight.Bold else FontWeight.Normal,
+                                            fontSize = 12.sp,
+                                            maxLines = 1
+                                        )
+                                    },
+                                    leadingIcon = if (selectedQueenTeamId == 2) {
+                                        { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                                    } else null,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("simplified_queen_team2_chip")
+                                )
+
+                                // None / Not Covered Option
+                                FilterChip(
+                                    selected = selectedQueenTeamId == null,
+                                    onClick = {
+                                        selectedQueenTeamId = null
+                                        selectedQueenPlayerId = null
+                                    },
+                                    label = {
+                                        Text(
+                                            text = "None",
+                                            fontWeight = if (selectedQueenTeamId == null) FontWeight.Bold else FontWeight.Normal,
+                                            fontSize = 12.sp
+                                        )
+                                    },
+                                    leadingIcon = if (selectedQueenTeamId == null) {
+                                        { Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(14.dp)) }
+                                    } else null,
+                                    modifier = Modifier
+                                        .weight(0.75f)
+                                        .testTag("simplified_queen_none_chip")
                                 )
                             }
 
-                            if (isQueenCovered) {
-                                if (isQueenStopApplied) {
+                            // If a team is selected, show player picker and status notice
+                            if (selectedQueenTeamId != null) {
+                                val queenTeamPlayers = if (selectedQueenTeamId == 1) config.team1Players else config.team2Players
+                                val isWinningTeamQueen = (selectedQueenTeamId == selectedWinningTeamId)
+
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text(
+                                        text = "Select player who pocketed the Queen:",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        queenTeamPlayers.forEach { player ->
+                                            val isSelected = selectedQueenPlayerId == player.id
+                                            Surface(
+                                                shape = RoundedCornerShape(12.dp),
+                                                color = if (isSelected) CarromQueenRed.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface,
+                                                border = BorderStroke(
+                                                    if (isSelected) 1.5.dp else 1.dp,
+                                                    if (isSelected) CarromQueenRed else MaterialTheme.colorScheme.outlineVariant
+                                                ),
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .clickable { selectedQueenPlayerId = player.id }
+                                                    .testTag("simplified_queen_player_${player.id}")
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.Center
+                                                ) {
+                                                    PlayerAvatar(name = player.name, avatarColorIndex = player.avatarColorIndex, size = 22.dp)
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text(
+                                                        text = player.name,
+                                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                        fontSize = 12.sp,
+                                                        color = if (isSelected) CarromQueenRed else MaterialTheme.colorScheme.onSurface,
+                                                        maxLines = 1
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Status note
+                                if (isWinningTeamQueen) {
+                                    if (isQueenStopApplied) {
+                                        Surface(
+                                            shape = RoundedCornerShape(8.dp),
+                                            color = Color(0xFFFFF3E0),
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Info,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFFE65100),
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = "24-Point Cutoff active: Winner score is already >= ${config.queenStopThreshold}. No Queen bonus pts added.",
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Medium,
+                                                    color = Color(0xFFE65100)
+                                                )
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    val loserName = if (selectedQueenTeamId == 1) config.team1Name else config.team2Name
+                                    val winnerName = if (selectedWinningTeamId == 1) config.team1Name else config.team2Name
+                                    val qPlayerName = queenTeamPlayers.find { it.id == selectedQueenPlayerId }?.name ?: loserName
+
                                     Surface(
                                         shape = RoundedCornerShape(8.dp),
-                                        color = Color(0xFFFFF3E0),
+                                        color = MaterialTheme.colorScheme.surfaceVariant,
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
                                         Row(
@@ -482,62 +656,16 @@ fun SimplifiedScoreboardScreen(
                                             Icon(
                                                 imageVector = Icons.Default.Info,
                                                 contentDescription = null,
-                                                tint = Color(0xFFE65100),
+                                                tint = MaterialTheme.colorScheme.primary,
                                                 modifier = Modifier.size(16.dp)
                                             )
                                             Spacer(modifier = Modifier.width(6.dp))
                                             Text(
-                                                text = "24-Point Cutoff active: Score is already >= ${config.queenStopThreshold}. No Queen bonus pts added.",
+                                                text = "Queen potted by $qPlayerName ($loserName). Since $winnerName won the board, no Queen bonus is awarded (+0 pts). Queen possession stat is credited to $qPlayerName 👑.",
                                                 fontSize = 10.sp,
                                                 fontWeight = FontWeight.Medium,
-                                                color = Color(0xFFE65100)
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
-                                        }
-                                    }
-                                }
-
-                                // Player who potted / covered the Queen
-                                Text(
-                                    text = "Who potted / covered the Queen?",
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-
-                                val winningPlayers = if (selectedWinningTeamId == 1) config.team1Players else config.team2Players
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    winningPlayers.forEach { player ->
-                                        val isSelected = selectedQueenPlayerId == player.id
-                                        Surface(
-                                            shape = RoundedCornerShape(12.dp),
-                                            color = if (isSelected) CarromQueenRed.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surface,
-                                            border = BorderStroke(
-                                                if (isSelected) 1.5.dp else 1.dp,
-                                                if (isSelected) CarromQueenRed else MaterialTheme.colorScheme.outlineVariant
-                                            ),
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .clickable { selectedQueenPlayerId = player.id }
-                                                .testTag("simplified_queen_player_${player.id}")
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.Center
-                                            ) {
-                                                PlayerAvatar(name = player.name, avatarColorIndex = player.avatarColorIndex, size = 22.dp)
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text(
-                                                    text = player.name,
-                                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                                    fontSize = 12.sp,
-                                                    color = if (isSelected) CarromQueenRed else MaterialTheme.colorScheme.onSurface,
-                                                    maxLines = 1
-                                                )
-                                            }
                                         }
                                     }
                                 }
@@ -564,8 +692,13 @@ fun SimplifiedScoreboardScreen(
                                         fontSize = 13.sp,
                                         color = MaterialTheme.colorScheme.primary
                                     )
+                                    val queenCalcNote = when {
+                                        selectedQueenTeamId == selectedWinningTeamId && selectedQueenPlayerId != null -> "$queenPointsAwarded (Queen by winner)"
+                                        selectedQueenTeamId != null && selectedQueenPlayerId != null -> "0 (Queen by opponent)"
+                                        else -> "0 (Queen not covered)"
+                                    }
                                     Text(
-                                        text = "$opponentCoinsRemaining (coins) + $queenPointsAwarded (Queen)",
+                                        text = "$opponentCoinsRemaining (coins) + $queenCalcNote",
                                         fontSize = 10.sp,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -650,7 +783,14 @@ fun SimplifiedScoreboardScreen(
                                                 fontWeight = FontWeight.Bold
                                             )
                                             Text(
-                                                text = if (br.queenCoveredByPlayerName != null) "Queen: ${br.queenCoveredByPlayerName} 👑" else "Queen not covered",
+                                                text = if (br.queenCoveredByPlayerName != null) {
+                                                    val qTeamName = if (br.queenCoveredByTeamId == 1) config.team1Name else config.team2Name
+                                                    if (br.queenCoveredByTeamId == br.winningTeamId) {
+                                                        "Queen: ${br.queenCoveredByPlayerName} (+${br.queenPointsAwarded} pts) 👑"
+                                                    } else {
+                                                        "Queen: ${br.queenCoveredByPlayerName} ($qTeamName, 0 pts) 👑"
+                                                    }
+                                                } else "Queen not covered",
                                                 fontSize = 10.sp,
                                                 color = if (br.queenCoveredByPlayerName != null) CarromQueenRed else MaterialTheme.colorScheme.onSurfaceVariant
                                             )
@@ -734,8 +874,8 @@ fun SimplifiedScoreboardScreen(
                                 onRecordBoardScore(
                                     selectedWinningTeamId,
                                     opponentCoinsRemaining,
-                                    if (isQueenCovered) selectedQueenPlayerId else null,
-                                    if (isQueenCovered) selectedWinningTeamId else null
+                                    selectedQueenPlayerId,
+                                    selectedQueenTeamId
                                 )
                             },
                             modifier = Modifier

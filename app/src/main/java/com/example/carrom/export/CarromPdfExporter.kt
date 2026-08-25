@@ -287,10 +287,11 @@ object CarromPdfExporter {
             canvas.drawText("+${b.boardScore} pts", colX[3] + 6f, curY + 15f, paint)
             paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
 
-            if (b.queenPointsAwarded > 0) {
+            if (b.queenCoveredByPlayerName != null) {
                 paint.color = Color.rgb(225, 29, 72)
-                paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-                canvas.drawText("${truncate(b.queenCoveredByPlayerName ?: "Covered", 12)} (+5)", colX[4] + 6f, curY + 15f, paint)
+                val ptsText = if (b.queenPointsAwarded > 0) "(+${b.queenPointsAwarded})" else "(0)"
+                paint.typeface = Typeface.create(Typeface.DEFAULT, if (b.queenPointsAwarded > 0) Typeface.BOLD else Typeface.NORMAL)
+                canvas.drawText("${truncate(b.queenCoveredByPlayerName, 11)} $ptsText", colX[4] + 6f, curY + 15f, paint)
                 paint.typeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL)
             } else {
                 paint.color = Color.rgb(148, 163, 184)

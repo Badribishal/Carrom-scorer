@@ -503,15 +503,18 @@ class CarromGameEngine(
 
         // Add synthetic turn log for player stats persistence if queen was potted
         val newTurnLogs = if (queenCoveredByPlayerId != null && queenCoveredByTeamId != null) {
+            val qTeamColor = _state.getTeamColorForBoard(queenCoveredByTeamId, currentBoardNum)
+            val isWinnerTeam = (queenCoveredByTeamId == winningTeamId)
+            val coinsPocketed = if (isWinnerTeam) (9 - opponentRemainingCoins).coerceAtLeast(0) else 1
             _state.allTurnLogs + TurnRecord(
                 turnNumber = _state.completedBoards.size + 1,
                 handNumber = 1,
                 playerId = queenCoveredByPlayerId,
                 playerName = queenCoveredPlayerName ?: "Player",
                 teamId = queenCoveredByTeamId,
-                teamColor = _state.getTeamColorForBoard(queenCoveredByTeamId, currentBoardNum),
-                whitePocketed = if (_state.getTeamColorForBoard(queenCoveredByTeamId, currentBoardNum) == TeamColor.WHITE) (9 - opponentRemainingCoins) else 0,
-                blackPocketed = if (_state.getTeamColorForBoard(queenCoveredByTeamId, currentBoardNum) == TeamColor.BLACK) (9 - opponentRemainingCoins) else 0,
+                teamColor = qTeamColor,
+                whitePocketed = if (qTeamColor == TeamColor.WHITE) coinsPocketed else 0,
+                blackPocketed = if (qTeamColor == TeamColor.BLACK) coinsPocketed else 0,
                 queenPocketed = true,
                 queenCovered = true,
                 penalties = 0

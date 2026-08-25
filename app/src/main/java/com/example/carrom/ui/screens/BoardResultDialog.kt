@@ -127,13 +127,21 @@ fun BoardResultDialog(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                QueenCoinBadge(size = 16.dp, isCovered = board.queenPointsAwarded > 0)
+                                QueenCoinBadge(size = 16.dp, isCovered = board.queenCoveredByPlayerId != null)
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = if (board.queenCoveredByTeamId == board.winningTeamId) {
-                                        if (board.queenPointsAwarded > 0) "Queen Bonus" else "Queen Covered (19+ Rule: 0 pts)"
-                                    } else {
-                                        "Queen (Not Awarded)"
+                                    text = when {
+                                        board.queenCoveredByTeamId == board.winningTeamId -> {
+                                            if (board.queenPointsAwarded > 0) {
+                                                "Queen Bonus (${board.queenCoveredByPlayerName ?: "Winner"})"
+                                            } else {
+                                                "Queen Covered by ${board.queenCoveredByPlayerName ?: "Winner"} (24+ Rule: 0 pts)"
+                                            }
+                                        }
+                                        board.queenCoveredByPlayerName != null -> {
+                                            "Queen covered by ${board.queenCoveredByPlayerName} (No winner bonus)"
+                                        }
+                                        else -> "Queen (Not Covered)"
                                     },
                                     fontSize = 13.sp
                                 )
