@@ -60,6 +60,7 @@ fun MatchCompleteScreen(
     val loserName = if (isT1Winner) config.team2Name else config.team1Name
     val loserScore = if (isT1Winner) state.team2Score else state.team1Score
     val winnerPlayers = if (isT1Winner) config.team1Players else config.team2Players
+    var showMatchSummaryModal by remember { mutableStateOf(false) }
 
     // Subtle pulsing celebration animation for trophy badge
     val infiniteTransition = rememberInfiniteTransition(label = "winner_pulse")
@@ -567,21 +568,43 @@ fun MatchCompleteScreen(
                             modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Button(
-                                onClick = onShareScorecardPdf,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(48.dp)
-                                    .testTag("share_scorecard_pdf_button"),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = CarromQueenRed,
-                                    contentColor = Color.White
-                                ),
-                                shape = RoundedCornerShape(14.dp)
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Icon(imageVector = Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Share Official Scorecard PDF", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                OutlinedButton(
+                                    onClick = { showMatchSummaryModal = true },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(44.dp)
+                                        .testTag("open_match_summary_modal_button"),
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = MaterialTheme.colorScheme.primary
+                                    ),
+                                    border = BorderStroke(1.2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f))
+                                ) {
+                                    Icon(imageVector = Icons.Default.Analytics, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Match Summary", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                }
+
+                                Button(
+                                    onClick = onShareScorecardPdf,
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(44.dp)
+                                        .testTag("share_scorecard_pdf_button"),
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = CarromQueenRed,
+                                        contentColor = Color.White
+                                    ),
+                                    shape = RoundedCornerShape(14.dp)
+                                ) {
+                                    Icon(imageVector = Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("PDF Scorecard", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                }
                             }
 
                             Row(
@@ -633,6 +656,15 @@ fun MatchCompleteScreen(
                     }
                 }
             }
+
+            // Match Summary Modal Dialog
+            if (showMatchSummaryModal) {
+                MatchSummaryModal(
+                    state = state,
+                    onDismiss = { showMatchSummaryModal = false },
+                    onSharePdf = onShareScorecardPdf
+                )
+            }
         }
     }
 }
@@ -674,3 +706,266 @@ private fun WinnerStatChip(
         }
     }
 }
+
+@Composable
+fun MatchSummaryModal(
+    state: GameState,
+    onDismiss: () -> Unit,
+    onSharePdf: () -> Unit = {}
+) {
+    val config = state.config
+    val isT1Winner = state.matchWinnerTeamId == 1
+    val winnerName = if (isT1Winner) config.team1Name else config.team2Name
+
+    // Team 1 Stats
+    val t1Score = state.team1Score
+    val t1Queens = state.completedBoards.count { it.queenCoveredByTeamId == 1 }
+    val t1NillBoards = state.completedBoards.count { it.winningTeamId == 1 && it.isNillBoard }
+    val t1BoardsWon = state.completedBoards.count { it.winningTeamId == 1 }
+
+    // Team 2 Stats
+    val t2Score = state.team2Score
+    val t2Queens = state.completedBoards.count { it.queenCoveredByTeamId == 2 }
+    val t2NillBoards = state.completedBoards.count { it.winningTeamId == 2 && it.isNillBoard }
+    val t2BoardsWon = state.completedBoards.count { it.winningTeamId == 2 }
+
+    val totalBoards = state.completedBoards.size
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("match_summary_modal_dialog"),
+        shape = RoundedCornerShape(24.dp),
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Surface(
+                    shape = CircleShape,
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.EmojiEvents,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Text(
+                        text = "Match Summary",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Black
+                    )
+                    Text(
+                        text = "$winnerName Won • $totalBoards Boards Played",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                // Team comparison table
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Header Row with Team Names
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "METRIC",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.weight(1.3f)
+                            )
+                            Text(
+                                text = config.team1Name,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Black,
+                                textAlign = TextAlign.Center,
+                                color = if (isT1Winner) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1
+                            )
+                            Text(
+                                text = config.team2Name,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Black,
+                                textAlign = TextAlign.Center,
+                                color = if (!isT1Winner) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1
+                            )
+                        }
+
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                        // Total Score
+                        SummaryMetricRow(
+                            label = "Total Score",
+                            team1Value = "$t1Score pts",
+                            team2Value = "$t2Score pts",
+                            team1Highlight = t1Score >= t2Score,
+                            team2Highlight = t2Score >= t1Score
+                        )
+
+                        // Queen Possession Count
+                        SummaryMetricRow(
+                            label = "Queen Possessions 👑",
+                            team1Value = "$t1Queens",
+                            team2Value = "$t2Queens",
+                            team1Highlight = t1Queens > t2Queens,
+                            team2Highlight = t2Queens > t1Queens
+                        )
+
+                        // Number of Nill Boards
+                        SummaryMetricRow(
+                            label = "Nill Boards Won",
+                            team1Value = "$t1NillBoards",
+                            team2Value = "$t2NillBoards",
+                            team1Highlight = t1NillBoards > t2NillBoards,
+                            team2Highlight = t2NillBoards > t1NillBoards
+                        )
+
+                        // Boards Won
+                        SummaryMetricRow(
+                            label = "Boards Won",
+                            team1Value = "$t1BoardsWon",
+                            team2Value = "$t2BoardsWon",
+                            team1Highlight = t1BoardsWon > t2BoardsWon,
+                            team2Highlight = t2BoardsWon > t1BoardsWon
+                        )
+                    }
+                }
+
+                // Victory Status Highlight
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = if (state.isWonByNillRule) Color(0xFFFCE4EC) else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+                    border = BorderStroke(
+                        1.dp,
+                        if (state.isWonByNillRule) Color(0xFFF48FB1) else MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = if (state.isWonByNillRule) Icons.Default.FlashOn else Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = if (state.isWonByNillRule) Color(0xFFC2185B) else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = if (state.isWonByNillRule) "Won via Nill Board Rule" else "Target Points Reached",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                color = if (state.isWonByNillRule) Color(0xFF880E4F) else MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                            Text(
+                                text = if (state.isWonByNillRule) {
+                                    "$winnerName claimed victory with 19+ pts while opponent was <7 pts."
+                                } else {
+                                    "$winnerName achieved the required ${config.targetPoints} match target points."
+                                },
+                                fontSize = 10.sp,
+                                color = if (state.isWonByNillRule) Color(0xFFAD1457) else MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onDismiss,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.testTag("dismiss_match_summary_modal_button")
+            ) {
+                Text("Close", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = {
+                    onDismiss()
+                    onSharePdf()
+                },
+                modifier = Modifier.testTag("match_summary_modal_share_pdf_button")
+            ) {
+                Icon(imageVector = Icons.Default.PictureAsPdf, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Export PDF")
+            }
+        }
+    )
+}
+
+@Composable
+private fun SummaryMetricRow(
+    label: String,
+    team1Value: String,
+    team2Value: String,
+    team1Highlight: Boolean = false,
+    team2Highlight: Boolean = false
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1.3f)
+        )
+        Text(
+            text = team1Value,
+            fontSize = 12.sp,
+            fontWeight = if (team1Highlight) FontWeight.Black else FontWeight.Normal,
+            color = if (team1Highlight) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = team2Value,
+            fontSize = 12.sp,
+            fontWeight = if (team2Highlight) FontWeight.Black else FontWeight.Normal,
+            color = if (team2Highlight) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
