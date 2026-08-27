@@ -27,8 +27,9 @@ class CarromEngineTest {
             proMode = true,
             targetPoints = 29,
             nillBoardThreshold = 7,
+            nillWinThreshold = 19,
             queenPoints = 5,
-            queenStopThreshold = 19,
+            queenStopThreshold = 24,
             enableQueenStopRule = true
         )
 
@@ -350,5 +351,70 @@ class CarromEngineTest {
         assertEquals(engine.state.turnState.currentHand, restored.turnState.currentHand)
         assertEquals(engine.state.config.team1Name, restored.config.team1Name)
         assertEquals(engine.state.config.team2Name, restored.config.team2Name)
+    }
+
+    @Test
+    fun test17_simplifiedMode_team1Scores19WhileOpponentUnder7_winsMatchByNillBoard() {
+        // In simplified mode (advance mode OFF)
+        val customConfig = sampleConfig.copy(proMode = false)
+        val customState = engine.state.copy(config = customConfig, team1Score = 10, team2Score = 4)
+        engine.updateState(customState)
+
+        // Team 1 wins board with 4 opponent coins left and covers Queen (+5 pts) -> 9 pts -> Total = 19 pts vs 4 pts
+        engine.recordSimplifiedBoard(
+            winningTeamId = 1,
+            opponentRemainingCoins = 4,
+            queenCoveredByPlayerId = 1L,
+            queenCoveredByTeamId = 1
+        )
+
+        assertEquals(19, engine.state.team1Score)
+        assertEquals(4, engine.state.team2Score)
+        assertTrue(engine.state.isMatchOver)
+        assertTrue(engine.state.isWonByNillRule)
+        assertEquals(1, engine.state.matchWinnerTeamId)
+        assertTrue(engine.state.completedBoards.last().isNillBoard)
+    }
+
+    @Test
+    fun test18_simplifiedMode_team2Scores19WhileOpponentUnder7_winsMatchByNillBoard() {
+        val customConfig = sampleConfig.copy(proMode = false)
+        val customState = engine.state.copy(config = customConfig, team1Score = 5, team2Score = 10)
+        engine.updateState(customState)
+
+        // Team 2 wins board with 4 opponent coins left and covers Queen (+5 pts) -> 9 pts -> Total = 19 pts vs 5 pts
+        engine.recordSimplifiedBoard(
+            winningTeamId = 2,
+            opponentRemainingCoins = 4,
+            queenCoveredByPlayerId = 2L,
+            queenCoveredByTeamId = 2
+        )
+
+        assertEquals(5, engine.state.team1Score)
+        assertEquals(19, engine.state.team2Score)
+        assertTrue(engine.state.isMatchOver)
+        assertTrue(engine.state.isWonByNillRule)
+        assertEquals(2, engine.state.matchWinnerTeamId)
+        assertTrue(engine.state.completedBoards.last().isNillBoard)
+    }
+
+    @Test
+    fun test19_simplifiedMode_opponentHas7Points_notNillMatchWin() {
+        val customConfig = sampleConfig.copy(proMode = false)
+        val customState = engine.state.copy(config = customConfig, team1Score = 10, team2Score = 7)
+        engine.updateState(customState)
+
+        // Team 1 wins board with 9 points -> 19 pts, but Team 2 has 7 pts (>= 7)
+        engine.recordSimplifiedBoard(
+            winningTeamId = 1,
+            opponentRemainingCoins = 4,
+            queenCoveredByPlayerId = 1L,
+            queenCoveredByTeamId = 1
+        )
+
+        assertEquals(19, engine.state.team1Score)
+        assertEquals(7, engine.state.team2Score)
+        assertFalse(engine.state.isMatchOver)
+        assertFalse(engine.state.isWonByNillRule)
     }
 }

@@ -14,6 +14,7 @@ object CarromJsonParser {
         json.put("proMode", config.proMode)
         json.put("targetPoints", config.targetPoints)
         json.put("nillBoardThreshold", config.nillBoardThreshold)
+        json.put("nillWinThreshold", config.nillWinThreshold)
         json.put("queenPoints", config.queenPoints)
         json.put("queenStopThreshold", config.queenStopThreshold)
         json.put("enableQueenStopRule", config.enableQueenStopRule)
@@ -49,8 +50,9 @@ object CarromJsonParser {
         val proMode = json.optBoolean("proMode", true)
         val targetPoints = json.optInt("targetPoints", 29)
         val nillBoardThreshold = json.optInt("nillBoardThreshold", 7)
+        val nillWinThreshold = json.optInt("nillWinThreshold", 19)
         val queenPoints = json.optInt("queenPoints", 5)
-        val queenStopThreshold = json.optInt("queenStopThreshold", 19)
+        val queenStopThreshold = json.optInt("queenStopThreshold", 24)
         val enableQueenStopRule = if (json.has("enableQueenStopRule")) json.optBoolean("enableQueenStopRule", true) else json.optBoolean("enable24PlusQueenRule", true)
 
         val team1Players = mutableListOf<Player>()
@@ -88,6 +90,7 @@ object CarromJsonParser {
             proMode = proMode,
             targetPoints = targetPoints,
             nillBoardThreshold = nillBoardThreshold,
+            nillWinThreshold = nillWinThreshold,
             queenPoints = queenPoints,
             queenStopThreshold = queenStopThreshold,
             enableQueenStopRule = enableQueenStopRule

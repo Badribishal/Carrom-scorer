@@ -21,6 +21,7 @@ enum class AppThemeMode {
 data class MatchRuleDefaults(
     val targetPoints: Int = 29,
     val nillBoardThreshold: Int = 7,
+    val nillWinThreshold: Int = 19,
     val queenPoints: Int = 5,
     val queenStopThreshold: Int = 24,
     val enableQueenStopRule: Boolean = true,

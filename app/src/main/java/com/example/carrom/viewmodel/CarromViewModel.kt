@@ -49,6 +49,7 @@ class CarromViewModel(application: Application) : AndroidViewModel(application) 
         proMode: Boolean,
         targetPoints: Int = 29,
         nillBoardThreshold: Int = 7,
+        nillWinThreshold: Int = 19,
         queenPoints: Int = 5,
         queenStopThreshold: Int = 24,
         enableQueenStopRule: Boolean = true
@@ -62,6 +63,7 @@ class CarromViewModel(application: Application) : AndroidViewModel(application) 
             proMode = proMode,
             targetPoints = targetPoints,
             nillBoardThreshold = nillBoardThreshold,
+            nillWinThreshold = nillWinThreshold,
             queenPoints = queenPoints,
             queenStopThreshold = queenStopThreshold,
             enableQueenStopRule = enableQueenStopRule

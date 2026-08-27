@@ -89,6 +89,14 @@ fun SimplifiedScoreboardScreen(
     val newPreviewT1Score = if (selectedWinningTeamId == 1) state.team1Score + calculatedBoardScore else state.team1Score
     val newPreviewT2Score = if (selectedWinningTeamId == 2) state.team2Score + calculatedBoardScore else state.team2Score
 
+    val losingTeamScore = if (selectedWinningTeamId == 1) state.team2Score else state.team1Score
+    val isNillBoardPreview = losingTeamScore < config.nillBoardThreshold
+    val previewT1NillWin = newPreviewT1Score >= config.nillWinThreshold && newPreviewT2Score < config.nillBoardThreshold
+    val previewT2NillWin = newPreviewT2Score >= config.nillWinThreshold && newPreviewT1Score < config.nillBoardThreshold
+    val isPreviewNillMatchWin = (selectedWinningTeamId == 1 && previewT1NillWin) || (selectedWinningTeamId == 2 && previewT2NillWin)
+    val isPreviewTargetWin = (selectedWinningTeamId == 1 && newPreviewT1Score >= config.targetPoints) || (selectedWinningTeamId == 2 && newPreviewT2Score >= config.targetPoints)
+    val isPreviewMatchOver = isPreviewNillMatchWin || isPreviewTargetWin
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -675,45 +683,82 @@ fun SimplifiedScoreboardScreen(
                         // D. LIVE RESULT CALCULATION BANNER
                         Surface(
                             shape = RoundedCornerShape(14.dp),
-                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
+                            color = if (isPreviewNillMatchWin) Color(0xFFFCE4EC) else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+                            border = BorderStroke(1.dp, if (isPreviewNillMatchWin) Color(0xFFF48FB1) else MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column {
-                                    val winningTeamName = if (selectedWinningTeamId == 1) config.team1Name else config.team2Name
-                                    Text(
-                                        text = "$winningTeamName gains: +$calculatedBoardScore pts",
-                                        fontWeight = FontWeight.Black,
-                                        fontSize = 13.sp,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                    val queenCalcNote = when {
-                                        selectedQueenTeamId == selectedWinningTeamId && selectedQueenPlayerId != null -> "$queenPointsAwarded (Queen by winner)"
-                                        selectedQueenTeamId != null && selectedQueenPlayerId != null -> "0 (Queen by opponent)"
-                                        else -> "0 (Queen not covered)"
+                            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        val winningTeamName = if (selectedWinningTeamId == 1) config.team1Name else config.team2Name
+                                        Text(
+                                            text = "$winningTeamName gains: +$calculatedBoardScore pts",
+                                            fontWeight = FontWeight.Black,
+                                            fontSize = 13.sp,
+                                            color = if (isPreviewNillMatchWin) Color(0xFFC2185B) else MaterialTheme.colorScheme.primary
+                                        )
+                                        val queenCalcNote = when {
+                                            selectedQueenTeamId == selectedWinningTeamId && selectedQueenPlayerId != null -> "$queenPointsAwarded (Queen by winner)"
+                                            selectedQueenTeamId != null && selectedQueenPlayerId != null -> "0 (Queen by opponent)"
+                                            else -> "0 (Queen not covered)"
+                                        }
+                                        Text(
+                                            text = "$opponentCoinsRemaining (coins) + $queenCalcNote",
+                                            fontSize = 10.sp,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     }
-                                    Text(
-                                        text = "$opponentCoinsRemaining (coins) + $queenCalcNote",
-                                        fontSize = 10.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = if (isPreviewNillMatchWin) Color(0xFFC2185B) else MaterialTheme.colorScheme.surface
+                                    ) {
+                                        Text(
+                                            text = "Match will be: $newPreviewT1Score - $newPreviewT2Score",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                            color = if (isPreviewNillMatchWin) Color.White else MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        )
+                                    }
                                 }
 
-                                Surface(
-                                    shape = RoundedCornerShape(8.dp),
-                                    color = MaterialTheme.colorScheme.surface
-                                ) {
+                                if (isPreviewNillMatchWin) {
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = Color(0xFFC2185B).copy(alpha = 0.12f)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.FlashOn,
+                                                contentDescription = null,
+                                                tint = Color(0xFFC2185B),
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = "NILL BOARD VICTORY: Reached 19+ pts while opponent < 7 pts (Match will end immediately)",
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFF880E4F)
+                                            )
+                                        }
+                                    }
+                                } else if (isNillBoardPreview) {
+                                    Spacer(modifier = Modifier.height(4.dp))
                                     Text(
-                                        text = "Match will be: $newPreviewT1Score - $newPreviewT2Score",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 11.sp,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                        text = "⚠️ Nill Board triggered: Opponent score ($losingTeamScore pts) is under ${config.nillBoardThreshold} pts",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color(0xFFE65100)
                                     )
                                 }
                             }
@@ -777,11 +822,28 @@ fun SimplifiedScoreboardScreen(
                                         }
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Column {
-                                            Text(
-                                                text = "${br.winningTeamName} (+${br.boardScore} pts)",
-                                                fontSize = 12.sp,
-                                                fontWeight = FontWeight.Bold
-                                            )
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(
+                                                    text = "${br.winningTeamName} (+${br.boardScore} pts)",
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                                if (br.isNillBoard) {
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Surface(
+                                                        shape = RoundedCornerShape(4.dp),
+                                                        color = Color(0xFFFFEBEE)
+                                                    ) {
+                                                        Text(
+                                                            text = "⚠️ Nill Board",
+                                                            fontSize = 9.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = Color(0xFFC2185B),
+                                                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
                                             Text(
                                                 text = if (br.queenCoveredByPlayerName != null) {
                                                     val qTeamName = if (br.queenCoveredByTeamId == 1) config.team1Name else config.team2Name

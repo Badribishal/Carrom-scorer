@@ -322,10 +322,10 @@ class CarromGameEngine(
 
         // Match victory conditions:
         // 1. Target points reached (e.g. 29 points or 25 points)
-        // 2. Nill Board Victory (19+ vs <7 Rule): If a team reaches or scores 19 or higher (queenStopThreshold)
-        //    while the opponent fails to reach at least 7 points (nillBoardThreshold), that team wins the match immediately.
-        val team1NillWin = newTeam1Score >= _state.config.queenStopThreshold && newTeam2Score < _state.config.nillBoardThreshold
-        val team2NillWin = newTeam2Score >= _state.config.queenStopThreshold && newTeam1Score < _state.config.nillBoardThreshold
+        // 2. Nill Board Victory (19+ vs <7 Rule): If a team reaches or scores 19 or higher (nillWinThreshold)
+        //    while the opponent fails to reach at least 7 points (nillBoardThreshold), that team wins the match immediately in all modes.
+        val team1NillWin = newTeam1Score >= _state.config.nillWinThreshold && newTeam2Score < _state.config.nillBoardThreshold
+        val team2NillWin = newTeam2Score >= _state.config.nillWinThreshold && newTeam1Score < _state.config.nillBoardThreshold
 
         val team1TargetWin = newTeam1Score >= _state.config.targetPoints
         val team2TargetWin = newTeam2Score >= _state.config.targetPoints
@@ -466,8 +466,8 @@ class CarromGameEngine(
         val losingTeamScore = if (winningTeamId == 1) _state.team2Score else _state.team1Score
         val isNillBoard = losingTeamScore < _state.config.nillBoardThreshold
 
-        val team1NillWin = newTeam1Score >= _state.config.queenStopThreshold && newTeam2Score < _state.config.nillBoardThreshold
-        val team2NillWin = newTeam2Score >= _state.config.queenStopThreshold && newTeam1Score < _state.config.nillBoardThreshold
+        val team1NillWin = newTeam1Score >= _state.config.nillWinThreshold && newTeam2Score < _state.config.nillBoardThreshold
+        val team2NillWin = newTeam2Score >= _state.config.nillWinThreshold && newTeam1Score < _state.config.nillBoardThreshold
         val team1TargetWin = newTeam1Score >= _state.config.targetPoints
         val team2TargetWin = newTeam2Score >= _state.config.targetPoints
 

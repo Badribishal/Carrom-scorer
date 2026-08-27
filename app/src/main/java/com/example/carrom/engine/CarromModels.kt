@@ -39,6 +39,7 @@ data class MatchConfig(
     val proMode: Boolean = true,
     val targetPoints: Int = 29,
     val nillBoardThreshold: Int = 7,
+    val nillWinThreshold: Int = 19, // Nill Match Victory triggered when a team scores 19+ pts while opponent < 7 pts in all modes
     val queenPoints: Int = 5,
     val queenStopThreshold: Int = 24, // Queen points cease once team reaches threshold (standard 24 pts)
     val enableQueenStopRule: Boolean = true // Flag to toggle the threshold rule
