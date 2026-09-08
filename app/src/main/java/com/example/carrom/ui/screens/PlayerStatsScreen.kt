@@ -6,6 +6,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -23,9 +24,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -36,52 +34,123 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.carrom.data.local.entity.GroupEntity
 import com.example.carrom.data.local.entity.PlayerEntity
+import com.example.carrom.engine.*
 import com.example.carrom.ui.components.AvatarPalette
 import com.example.carrom.ui.components.PlayerAvatar
+import com.example.carrom.ui.components.PlayerTrajectoryLineGraph
 import com.example.carrom.ui.components.QueenCoinBadge
 import com.example.ui.theme.CarromQueenRed
-import kotlinx.coroutines.delay
+import java.text.SimpleDateFormat
+import java.util.*
+
+enum class PlayerSortOption(val displayName: String) {
+    LEVEL_XP("Level & XP"),
+    WINS("Most Wins"),
+    WIN_RATE("Win Rate %"),
+    COINS("Total Coins"),
+    QUEENS("Queens Covered"),
+    NAME("Name (A-Z)")
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlayerStatsScreen(
     players: List<PlayerEntity>,
-    onAddNewPlayer: (name: String, colorIndex: Int, nickname: String, notes: String, skillLevel: String) -> Unit,
+    groups: List<GroupEntity> = emptyList(),
+    initialGroupFilter: String? = null,
+    onAddNewPlayer: (name: String, colorIndex: Int, nickname: String, notes: String, skillLevel: String, groupName: String) -> Unit,
     onUpdatePlayer: (PlayerEntity) -> Unit = {},
     onDeletePlayer: (Long) -> Unit = {},
+    onAddGroup: (name: String, description: String, colorIndex: Int) -> Unit = { _, _, _ -> },
     onExportPlayers: () -> Unit = {},
     onBack: () -> Unit
 ) {
     var searchQuery by rememberSaveable { mutableStateOf("") }
-    var selectedPlayer by remember { mutableStateOf<PlayerEntity?>(null) }
+    var selectedGroupFilter by rememberSaveable { mutableStateOf(initialGroupFilter ?: "ALL") }
+    var sortOption by rememberSaveable { mutableStateOf(PlayerSortOption.LEVEL_XP) }
+    var selectedPlayerForDeepDive by remember { mutableStateOf<PlayerEntity?>(null) }
     var showAddPlayerDialog by remember { mutableStateOf(false) }
     var playerToEdit by remember { mutableStateOf<PlayerEntity?>(null) }
     var playerToDelete by remember { mutableStateOf<PlayerEntity?>(null) }
+    var showSortMenu by remember { mutableStateOf(false) }
 
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    val filteredPlayers = remember(players, searchQuery) {
-        if (searchQuery.isBlank()) players
-        else players.filter {
-            it.name.contains(searchQuery, ignoreCase = true) ||
-            it.nickname.contains(searchQuery, ignoreCase = true) ||
-            it.skillLevel.contains(searchQuery, ignoreCase = true)
+    // Extract all group names available
+    val availableGroupNames = remember(groups, players) {
+        val names = linkedSetOf<String>()
+        groups.forEach { if (it.name.isNotBlank()) names.add(it.name) }
+        players.forEach {
+            if (it.groupName.isNotBlank() && !it.groupName.equals("General", ignoreCase = true)) {
+                names.add(it.groupName)
+            }
         }
+        if (names.isEmpty()) {
+            names.add("General")
+        }
+        names.toList()
+    }
+
+    // Filter and sort players
+    val processedPlayers = remember(players, searchQuery, selectedGroupFilter, sortOption) {
+        var list = players
+
+        // Group filtering (supports both primary groupName and multi-group membership)
+        if (selectedGroupFilter != "ALL") {
+            list = list.filter {
+                it.groupName.equals(selectedGroupFilter, ignoreCase = true) ||
+                groups.find { g -> g.name.equals(selectedGroupFilter, ignoreCase = true) }?.hasMember(it.id) == true
+            }
+        }
+
+        // Search filtering
+        if (searchQuery.isNotBlank()) {
+            list = list.filter {
+                it.name.contains(searchQuery, ignoreCase = true) ||
+                it.nickname.contains(searchQuery, ignoreCase = true) ||
+                it.groupName.contains(searchQuery, ignoreCase = true) ||
+                it.skillLevel.contains(searchQuery, ignoreCase = true)
+            }
+        }
+
+        // Sorting
+        when (sortOption) {
+            PlayerSortOption.LEVEL_XP -> list.sortedByDescending { PlayerLevelSystem.calculatePlayerXp(it).totalXp }
+            PlayerSortOption.WINS -> list.sortedByDescending { it.matchesWon }
+            PlayerSortOption.WIN_RATE -> list.sortedWith(compareByDescending<PlayerEntity> { it.winRate }.thenByDescending { it.matchesPlayed })
+            PlayerSortOption.COINS -> list.sortedByDescending { it.totalCoinsPocketed }
+            PlayerSortOption.QUEENS -> list.sortedByDescending { it.queensCovered }
+            PlayerSortOption.NAME -> list.sortedBy { it.name.lowercase(Locale.ROOT) }
+        }
+    }
+
+    // Top player (MVP)
+    val topPlayer = remember(players) {
+        players.maxByOrNull { PlayerLevelSystem.calculatePlayerXp(it).totalXp }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
-                    Text(
-                        "Player Profiles & Stats",
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleLarge
-                    )
+                    Column {
+                        Text(
+                            "Player Statistics & Levels",
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleLarge
+                        )
+                        Text(
+                            "${players.size} Players • Levels & Achievements",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 },
                 navigationIcon = {
                     IconButton(
@@ -99,7 +168,7 @@ fun PlayerStatsScreen(
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Share,
-                                contentDescription = "Export Player Stats",
+                                contentDescription = "Export Stats",
                                 tint = MaterialTheme.colorScheme.primary
                             )
                         }
@@ -117,23 +186,16 @@ fun PlayerStatsScreen(
             )
         },
         floatingActionButton = {
-            FloatingActionButton(
+            ExtendedFloatingActionButton(
                 onClick = { showAddPlayerDialog = true },
                 containerColor = MaterialTheme.colorScheme.primary,
                 contentColor = MaterialTheme.colorScheme.onPrimary,
                 shape = RoundedCornerShape(18.dp),
-                modifier = Modifier
-                    .testTag("add_player_fab")
-                    .animateContentSize()
+                modifier = Modifier.testTag("add_player_fab")
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(imageVector = Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(20.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Add Player", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                }
+                Icon(imageVector = Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(20.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Add Player", fontWeight = FontWeight.Bold)
             }
         }
     ) { innerPadding ->
@@ -143,176 +205,313 @@ fun PlayerStatsScreen(
                 .padding(innerPadding)
                 .padding(horizontal = 16.dp)
         ) {
-            Spacer(modifier = Modifier.height(4.dp))
+            Spacer(modifier = Modifier.height(6.dp))
 
-            // Search Bar
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                placeholder = { Text("Search by name, nickname, or rank...", fontSize = 13.sp) },
-                leadingIcon = {
-                    Icon(
-                        Icons.Default.Search,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                },
-                trailingIcon = {
-                    AnimatedVisibility(
-                        visible = searchQuery.isNotEmpty(),
-                        enter = fadeIn() + scaleIn(),
-                        exit = fadeOut() + scaleOut()
-                    ) {
-                        IconButton(onClick = { searchQuery = "" }) {
-                            Icon(Icons.Default.Close, contentDescription = "Clear", modifier = Modifier.size(18.dp))
-                        }
-                    }
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(16.dp),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = KeyboardActions(onDone = {
-                    keyboardController?.hide()
-                    focusManager.clearFocus()
-                }),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("player_search_field")
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            AnimatedContent(
-                targetState = filteredPlayers.isEmpty(),
-                transitionSpec = {
-                    fadeIn(animationSpec = tween(220)) togetherWith fadeOut(animationSpec = tween(180))
-                },
-                label = "players_list_content"
-            ) { isEmpty ->
-                if (isEmpty) {
-                    Box(
+            // OVERVIEW HERO METRICS (COMPACT & MINIMAL)
+            if (players.isNotEmpty()) {
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .fillMaxHeight(0.75f),
-                        contentAlignment = Alignment.Center
+                            .padding(horizontal = 12.dp, vertical = 7.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.padding(24.dp)
-                        ) {
-                            Surface(
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
-                                modifier = Modifier.size(72.dp)
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Default.PeopleOutline,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier.size(36.dp)
-                                    )
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(14.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.MilitaryTech,
+                                contentDescription = null,
+                                tint = Color(0xFFFFB300),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = if (players.isEmpty()) "No saved players yet" else "No players match your search",
-                                style = MaterialTheme.typography.titleMedium,
+                                text = if (topPlayer != null) "MVP: ${topPlayer.name} (Lvl ${PlayerLevelSystem.calculatePlayerXp(topPlayer).level})" else "${players.size} Players",
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                textAlign = TextAlign.Center
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = if (players.isEmpty()) "Tap '+ Add Player' below to register player profiles with custom colors and stats." else "Try searching with a different name or keyword.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center
-                            )
-                            if (players.isEmpty()) {
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Button(
-                                    onClick = { showAddPlayerDialog = true },
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Add First Player")
+                        }
+
+                        Text(
+                            text = "${players.sumOf { it.matchesWon }}W • ${players.sumOf { it.totalCoinsPocketed }} Coins • ${players.sumOf { it.queensCovered }} ♛",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
+            // SEARCH BAR AND SORT DROPDOWN
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Search name, group, skill...", fontSize = 13.sp) },
+                    leadingIcon = {
+                        Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+                    },
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(Icons.Default.Close, contentDescription = "Clear", modifier = Modifier.size(18.dp))
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = {
+                        keyboardController?.hide()
+                        focusManager.clearFocus()
+                    }),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("player_search_field")
+                )
+
+                // SORT BUTTON & MENU
+                Box {
+                    FilledTonalIconButton(
+                        onClick = { showSortMenu = true },
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.testTag("sort_players_button")
+                    ) {
+                        Icon(Icons.Default.Sort, contentDescription = "Sort Options")
+                    }
+
+                    DropdownMenu(
+                        expanded = showSortMenu,
+                        onDismissRequest = { showSortMenu = false }
+                    ) {
+                        Text(
+                            text = "Sort Players By",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                        )
+                        PlayerSortOption.values().forEach { option ->
+                            DropdownMenuItem(
+                                text = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        if (sortOption == option) {
+                                            Icon(
+                                                Icons.Default.Check,
+                                                contentDescription = null,
+                                                tint = MaterialTheme.colorScheme.primary,
+                                                modifier = Modifier.size(16.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                        } else {
+                                            Spacer(modifier = Modifier.width(22.dp))
+                                        }
+                                        Text(option.displayName)
+                                    }
+                                },
+                                onClick = {
+                                    sortOption = option
+                                    showSortMenu = false
                                 }
+                            )
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // GROUP FILTER CHIP ROW
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // "ALL" Chip
+                FilterChip(
+                    selected = selectedGroupFilter == "ALL",
+                    onClick = { selectedGroupFilter = "ALL" },
+                    label = {
+                        Text(
+                            "All Players (${players.size})",
+                            fontSize = 12.sp,
+                            fontWeight = if (selectedGroupFilter == "ALL") FontWeight.Bold else FontWeight.Normal
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(Icons.Default.People, contentDescription = null, modifier = Modifier.size(14.dp))
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.testTag("filter_all_groups")
+                )
+
+                // Chips for each group
+                availableGroupNames.forEach { groupName ->
+                    val isSelected = selectedGroupFilter.equals(groupName, ignoreCase = true)
+                    val count = players.count { it.groupName.equals(groupName, ignoreCase = true) }
+
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { selectedGroupFilter = groupName },
+                        label = {
+                            Text(
+                                "$groupName ($count)",
+                                fontSize = 12.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(Icons.Default.Groups, contentDescription = null, modifier = Modifier.size(14.dp))
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.testTag("filter_group_$groupName")
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // PLAYERS ROSTER LIST OR EMPTY STATE
+            if (processedPlayers.isEmpty()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(24.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+                            modifier = Modifier.size(68.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Default.PersonSearch,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(34.dp)
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text(
+                            text = if (players.isEmpty()) "No Players Registered Yet" else "No Players Found",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = if (players.isEmpty()) "Tap '+ Add Player' below to register players, assign groups, and track levels & achievements." else "Try clearing your search query or selecting 'All Players'.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+
+                        if (players.isEmpty()) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Button(
+                                onClick = { showAddPlayerDialog = true },
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Add First Player")
                             }
                         }
                     }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        items(filteredPlayers, key = { it.id }) { player ->
-                            PlayerCard(
-                                player = player,
-                                onClick = { selectedPlayer = player }
-                            )
-                        }
-                        item { Spacer(modifier = Modifier.height(84.dp)) }
+                }
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    contentPadding = PaddingValues(bottom = 80.dp)
+                ) {
+                    items(processedPlayers, key = { it.id }) { player ->
+                        RedesignedPlayerCard(
+                            player = player,
+                            groups = groups,
+                            onClick = { selectedPlayerForDeepDive = player },
+                            onEdit = { playerToEdit = player },
+                            onDelete = { playerToDelete = player }
+                        )
                     }
                 }
             }
         }
     }
 
-    // Separate Add Player Dialog (Fully encapsulated state for zero typing lag)
+    // ADD PLAYER DIALOG (PLAYER DATA ENTRY WITH GROUP SELECTION)
     if (showAddPlayerDialog) {
-        AddPlayerFastModal(
+        AddEditPlayerBottomSheet(
+            playerToEdit = null,
+            availableGroups = availableGroupNames,
+            defaultGroup = if (selectedGroupFilter != "ALL") selectedGroupFilter else "General",
             onDismiss = { showAddPlayerDialog = false },
-            onConfirm = { name, colorIdx, nickname, notes, skill ->
-                onAddNewPlayer(name, colorIdx, nickname, notes, skill)
+            onAddGroup = onAddGroup,
+            onConfirm = { name, colorIdx, nickname, notes, skillLevel, groupName ->
+                onAddNewPlayer(name, colorIdx, nickname, notes, skillLevel, groupName)
                 showAddPlayerDialog = false
             }
         )
     }
 
-    // Player Detail Sheet
-    if (selectedPlayer != null) {
-        PlayerDetailBottomSheet(
-            player = selectedPlayer!!,
-            onDismiss = { selectedPlayer = null },
-            onEdit = {
-                playerToEdit = it
-                selectedPlayer = null
-            },
-            onDelete = {
-                playerToDelete = it
-                selectedPlayer = null
-            }
-        )
-    }
-
-    // Edit Player Dialog (Encapsulated state)
-    if (playerToEdit != null) {
-        EditPlayerFastModal(
-            player = playerToEdit!!,
+    // EDIT PLAYER DIALOG
+    playerToEdit?.let { player ->
+        AddEditPlayerBottomSheet(
+            playerToEdit = player,
+            availableGroups = availableGroupNames,
+            defaultGroup = player.groupName,
             onDismiss = { playerToEdit = null },
-            onConfirm = { updated ->
-                onUpdatePlayer(updated)
+            onAddGroup = onAddGroup,
+            onConfirm = { name, colorIdx, nickname, notes, skillLevel, groupName ->
+                onUpdatePlayer(
+                    player.copy(
+                        name = name,
+                        avatarColorIndex = colorIdx,
+                        nickname = nickname,
+                        notes = notes,
+                        skillLevel = skillLevel,
+                        groupName = groupName
+                    )
+                )
                 playerToEdit = null
             }
         )
     }
 
-    // Delete Confirmation Dialog
-    if (playerToDelete != null) {
+    // DELETE PLAYER DIALOG
+    playerToDelete?.let { player ->
         AlertDialog(
             onDismissRequest = { playerToDelete = null },
-            icon = { Icon(Icons.Default.DeleteForever, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+            icon = { Icon(Icons.Default.DeleteOutline, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
             title = { Text("Delete Player Profile") },
             text = {
-                Text("Are you sure you want to delete ${playerToDelete?.name}? Match records and stats history will be retained.")
+                Text("Are you sure you want to permanently delete \"${player.name}\"? Career stats, levels, and achievements for this player will be removed.")
             },
             confirmButton = {
                 Button(
                     onClick = {
-                        playerToDelete?.let { onDeletePlayer(it.id) }
+                        onDeletePlayer(player.id)
                         playerToDelete = null
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
@@ -327,33 +526,290 @@ fun PlayerStatsScreen(
             }
         )
     }
+
+    // DETAILED PLAYER DEEP DIVE MODAL (LEVELS, ACHIEVEMENTS & STATS)
+    selectedPlayerForDeepDive?.let { player ->
+        PlayerDeepDiveSheet(
+            player = player,
+            groups = groups,
+            onDismiss = { selectedPlayerForDeepDive = null },
+            onEdit = {
+                selectedPlayerForDeepDive = null
+                playerToEdit = player
+            }
+        )
+    }
+}
+
+@Composable
+private fun StatMiniBadge(
+    label: String,
+    value: String,
+    icon: ImageVector
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(15.dp)
+            )
+            Spacer(modifier = Modifier.width(3.dp))
+            Text(
+                text = value,
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+        Text(
+            text = label,
+            fontSize = 10.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
 }
 
 /**
- * Encapsulated fast modal for adding a player.
- * Keystrokes are isolated to this sub-tree to ensure zero frame-drops.
+ * Minimal & Compact Player Card showing Name, Level, Tier, and Key Stats in a space-saving layout.
+ */
+@Composable
+private fun RedesignedPlayerCard(
+    player: PlayerEntity,
+    groups: List<GroupEntity> = emptyList(),
+    onClick: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val levelInfo = remember(player) { PlayerLevelSystem.calculatePlayerXp(player) }
+
+    val playerGroups = remember(player, groups) {
+        val list = mutableListOf<String>()
+        groups.forEach { g ->
+            if (g.hasMember(player.id) && !list.contains(g.name)) {
+                list.add(g.name)
+            }
+        }
+        if (player.groupName.isNotBlank() && !player.groupName.equals("General", true) && !list.contains(player.groupName)) {
+            list.add(player.groupName)
+        }
+        list
+    }
+
+    var showMenu by remember { mutableStateOf(false) }
+
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+        shadowElevation = 0.5.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .testTag("player_card_${player.id}")
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Minimal Avatar with Level Badge
+            Box {
+                PlayerAvatar(
+                    name = player.name,
+                    avatarColorIndex = player.avatarColorIndex,
+                    size = 38.dp
+                )
+                Surface(
+                    shape = CircleShape,
+                    color = levelInfo.tier.color,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.surface),
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(16.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text(
+                            text = "${levelInfo.level}",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 8.sp
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            // Player Info (Compact 2-line layout)
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    Text(
+                        text = player.name,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    // Tier & Level Badge
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = levelInfo.tier.color.copy(alpha = 0.15f)
+                    ) {
+                        Text(
+                            text = "Lvl ${levelInfo.level} • ${levelInfo.tier.title}",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = levelInfo.tier.color,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                        )
+                    }
+
+                    // Group Badge (if any)
+                    if (playerGroups.isNotEmpty()) {
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                        ) {
+                            Text(
+                                text = playerGroups.first(),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(3.dp))
+
+                // Single compact stats line: Wins/Played (Win%), Coins, Queens, Total XP
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = "${player.matchesWon}W/${player.matchesPlayed}M (${"%.0f".format(player.winRate)}%)",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = if (player.matchesWon > 0) Color(0xFF2E7D32) else MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "•",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.outlineVariant
+                    )
+                    Text(
+                        text = "${player.totalCoinsPocketed} Coins",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "•",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.outlineVariant
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        QueenCoinBadge(size = 11.dp, isCovered = player.queensCovered > 0)
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Text(
+                            text = "${player.queensCovered}",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = if (player.queensCovered > 0) CarromQueenRed else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Text(
+                        text = "•",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.outlineVariant
+                    )
+                    Text(
+                        text = "${levelInfo.totalXp} XP",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = levelInfo.tier.color
+                    )
+                }
+            }
+
+            // More Options Menu
+            Box {
+                IconButton(
+                    onClick = { showMenu = true },
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        Icons.Default.MoreVert,
+                        contentDescription = "Options",
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("View Full Deep-Dive", fontSize = 13.sp) },
+                        leadingIcon = { Icon(Icons.Default.Insights, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                        onClick = {
+                            showMenu = false
+                            onClick()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Edit Player Profile", fontSize = 13.sp) },
+                        leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp)) },
+                        onClick = {
+                            showMenu = false
+                            onEdit()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Delete Player", color = MaterialTheme.colorScheme.error, fontSize = 13.sp) },
+                        leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp)) },
+                        onClick = {
+                            showMenu = false
+                            onDelete()
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Redesigned Add/Edit Player Modal Bottom Sheet with First-Class Group Selection.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AddPlayerFastModal(
+private fun AddEditPlayerBottomSheet(
+    playerToEdit: PlayerEntity?,
+    availableGroups: List<String>,
+    defaultGroup: String,
     onDismiss: () -> Unit,
-    onConfirm: (name: String, colorIndex: Int, nickname: String, notes: String, skillLevel: String) -> Unit
+    onAddGroup: (name: String, description: String, colorIndex: Int) -> Unit,
+    onConfirm: (name: String, colorIndex: Int, nickname: String, notes: String, skillLevel: String, groupName: String) -> Unit
 ) {
-    var name by rememberSaveable { mutableStateOf("") }
-    var nickname by rememberSaveable { mutableStateOf("") }
-    var notes by rememberSaveable { mutableStateOf("") }
-    var skillLevel by rememberSaveable { mutableStateOf("Intermediate") }
-    var selectedColorIndex by rememberSaveable { mutableIntStateOf(0) }
-    var nameError by remember { mutableStateOf(false) }
-
-    val focusRequester = remember { FocusRequester() }
-
-    LaunchedEffect(Unit) {
-        delay(120)
-        try {
-            focusRequester.requestFocus()
-        } catch (_: Exception) {}
-    }
+    var name by rememberSaveable { mutableStateOf(playerToEdit?.name ?: "") }
+    var nickname by rememberSaveable { mutableStateOf(playerToEdit?.nickname ?: "") }
+    var notes by rememberSaveable { mutableStateOf(playerToEdit?.notes ?: "") }
+    var skillLevel by rememberSaveable { mutableStateOf(playerToEdit?.skillLevel ?: "Intermediate") }
+    var selectedColorIndex by rememberSaveable { mutableStateOf(playerToEdit?.avatarColorIndex ?: 0) }
+    var selectedGroupName by rememberSaveable { mutableStateOf(playerToEdit?.groupName ?: defaultGroup) }
+    var nameError by rememberSaveable { mutableStateOf(false) }
+    var showQuickNewGroupDialog by remember { mutableStateOf(false) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -381,12 +837,12 @@ private fun AddPlayerFastModal(
                 Spacer(modifier = Modifier.width(14.dp))
                 Column {
                     Text(
-                        text = "Add New Player",
+                        text = if (playerToEdit == null) "Add New Player" else "Edit Player Profile",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Save player for instant match selection & stats tracking",
+                        text = "Assign player to a group for quick match entry & stats tracking",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -416,7 +872,6 @@ private fun AddPlayerFastModal(
                 shape = RoundedCornerShape(14.dp),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .focusRequester(focusRequester)
                     .testTag("add_player_dialog_name_input")
             )
 
@@ -434,6 +889,52 @@ private fun AddPlayerFastModal(
                 shape = RoundedCornerShape(14.dp),
                 modifier = Modifier.fillMaxWidth()
             )
+
+            // GROUP SELECTION SECTION
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Assign to Group *",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    TextButton(
+                        onClick = { showQuickNewGroupDialog = true },
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("New Group", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+
+                // Group Chips
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    availableGroups.forEach { groupName ->
+                        val isSelected = selectedGroupName.equals(groupName, ignoreCase = true)
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { selectedGroupName = groupName },
+                            label = { Text(groupName, fontSize = 12.sp, fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal) },
+                            leadingIcon = {
+                                Icon(Icons.Default.Groups, contentDescription = null, modifier = Modifier.size(14.dp))
+                            },
+                            shape = RoundedCornerShape(10.dp)
+                        )
+                    }
+                }
+            }
 
             // Skill Level Selector
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -475,106 +976,138 @@ private fun AddPlayerFastModal(
                 ) {
                     AvatarPalette.forEachIndexed { index, color ->
                         val isSelected = selectedColorIndex == index
-                        val scale by animateFloatAsState(
-                            targetValue = if (isSelected) 1.15f else 1f,
-                            animationSpec = spring(dampingRatio = 0.6f),
-                            label = "color_scale"
-                        )
                         Box(
                             modifier = Modifier
                                 .size(34.dp)
-                                .scale(scale)
                                 .clip(CircleShape)
                                 .background(color)
                                 .clickable { selectedColorIndex = index }
-                                .then(
-                                    if (isSelected) Modifier.border(2.5.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
-                                    else Modifier
+                                .border(
+                                    width = if (isSelected) 3.dp else 1.dp,
+                                    color = if (isSelected) MaterialTheme.colorScheme.onSurface else Color.Transparent,
+                                    shape = CircleShape
                                 ),
                             contentAlignment = Alignment.Center
                         ) {
                             if (isSelected) {
-                                Icon(
-                                    imageVector = Icons.Default.Check,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(18.dp)
-                                )
+                                Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
                             }
                         }
                     }
                 }
             }
 
-            // Notes / Style
+            // Notes / Biography
             OutlinedTextField(
                 value = notes,
                 onValueChange = { notes = it },
-                label = { Text("Playing Style / Notes (Optional)") },
-                placeholder = { Text("e.g. Aggressive thumb flick, White specialist") },
-                maxLines = 2,
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                label = { Text("Notes / Tournament History") },
+                placeholder = { Text("e.g. Right hand break specialist, club captain") },
+                maxLines = 3,
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Sentences,
+                    imeAction = ImeAction.Done
+                ),
                 shape = RoundedCornerShape(14.dp),
                 modifier = Modifier.fillMaxWidth()
             )
 
             Spacer(modifier = Modifier.height(4.dp))
 
-            // Action Buttons
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            Button(
+                onClick = {
+                    val trimmedName = name.trim()
+                    if (trimmedName.isBlank()) {
+                        nameError = true
+                    } else {
+                        onConfirm(
+                            trimmedName,
+                            selectedColorIndex,
+                            nickname.trim(),
+                            notes.trim(),
+                            skillLevel,
+                            selectedGroupName.ifBlank { "General" }
+                        )
+                    }
+                },
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("confirm_add_player_button")
             ) {
-                OutlinedButton(
-                    onClick = onDismiss,
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp)
-                ) {
-                    Text("Cancel")
-                }
-
-                Button(
-                    onClick = {
-                        val trimmed = name.trim()
-                        if (trimmed.isBlank()) {
-                            nameError = true
-                        } else {
-                            onConfirm(trimmed, selectedColorIndex, nickname.trim(), notes.trim(), skillLevel)
-                        }
-                    },
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier
-                        .weight(1.4f)
-                        .height(48.dp)
-                        .testTag("confirm_add_player_button")
-                ) {
-                    Icon(Icons.Default.PersonAdd, contentDescription = null, modifier = Modifier.size(18.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Save Player", fontWeight = FontWeight.Bold)
-                }
+                Text(
+                    text = if (playerToEdit == null) "Save Player to Group" else "Update Player Profile",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 15.sp,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
             }
         }
+    }
+
+    // Quick Dialog to create new group on the fly inside player data entry
+    if (showQuickNewGroupDialog) {
+        var newGroupNameInput by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showQuickNewGroupDialog = false },
+            title = { Text("Create New Group") },
+            text = {
+                OutlinedTextField(
+                    value = newGroupNameInput,
+                    onValueChange = { newGroupNameInput = it },
+                    label = { Text("Group Name") },
+                    placeholder = { Text("e.g. Club Alpha, Family") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        val trimmed = newGroupNameInput.trim()
+                        if (trimmed.isNotBlank()) {
+                            onAddGroup(trimmed, "", 0)
+                            selectedGroupName = trimmed
+                            showQuickNewGroupDialog = false
+                        }
+                    }
+                ) {
+                    Text("Add Group")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showQuickNewGroupDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 
 /**
- * Encapsulated fast modal for editing a player.
+ * Detailed Player Deep-Dive Modal Bottom Sheet:
+ * Shows Level XP Breakdown, Unlockable Achievements, and Match Performance Metrics.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun EditPlayerFastModal(
+private fun PlayerDeepDiveSheet(
     player: PlayerEntity,
+    groups: List<GroupEntity> = emptyList(),
     onDismiss: () -> Unit,
-    onConfirm: (PlayerEntity) -> Unit
+    onEdit: () -> Unit
 ) {
-    var editName by rememberSaveable { mutableStateOf(player.name) }
-    var editNickname by rememberSaveable { mutableStateOf(player.nickname) }
-    var editSkill by rememberSaveable { mutableStateOf(player.skillLevel) }
-    var editNotes by rememberSaveable { mutableStateOf(player.notes) }
-    var editColorIndex by rememberSaveable { mutableIntStateOf(player.avatarColorIndex) }
-    var nameError by remember { mutableStateOf(false) }
+    val levelInfo = remember(player) { PlayerLevelSystem.calculatePlayerXp(player) }
+    val achievements = remember(player) { PlayerLevelSystem.getPlayerAchievements(player) }
+
+    var selectedTab by rememberSaveable { mutableStateOf(0) }
+    var selectedAchievementCategory by rememberSaveable { mutableStateOf(AchievementCategory.ALL) }
+
+    val filteredAchievements = remember(achievements, selectedAchievementCategory) {
+        if (selectedAchievementCategory == AchievementCategory.ALL) achievements
+        else achievements.filter { it.category == selectedAchievementCategory }
+    }
+
+    val unlockedCount = remember(achievements) { achievements.count { it.isUnlocked } }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -585,469 +1118,627 @@ private fun EditPlayerFastModal(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp)
-                .padding(bottom = 32.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                PlayerAvatar(
-                    name = editName.ifBlank { "P" },
-                    avatarColorIndex = editColorIndex,
-                    size = 48.dp
-                )
-                Spacer(modifier = Modifier.width(14.dp))
-                Column {
-                    Text("Edit Player Profile", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text("Update player details and visual theme", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-
-            OutlinedTextField(
-                value = editName,
-                onValueChange = {
-                    editName = it
-                    if (nameError && it.isNotBlank()) nameError = false
-                },
-                label = { Text("Player Name *") },
-                singleLine = true,
-                isError = nameError,
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            OutlinedTextField(
-                value = editNickname,
-                onValueChange = { editNickname = it },
-                label = { Text("Nickname / Title") },
-                singleLine = true,
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            // Skill Level
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Skill Level", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    listOf("Beginner", "Intermediate", "Advanced", "Master").forEach { skill ->
-                        val isSelected = editSkill == skill
-                        FilterChip(
-                            selected = isSelected,
-                            onClick = { editSkill = skill },
-                            label = { Text(skill, fontSize = 11.sp) },
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
-            }
-
-            // Colors
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Avatar Color Theme", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    AvatarPalette.forEachIndexed { index, color ->
-                        val isSelected = editColorIndex == index
-                        Box(
-                            modifier = Modifier
-                                .size(34.dp)
-                                .clip(CircleShape)
-                                .background(color)
-                                .clickable { editColorIndex = index }
-                                .then(
-                                    if (isSelected) Modifier.border(2.5.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
-                                    else Modifier
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            if (isSelected) {
-                                Icon(Icons.Default.Check, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
-                            }
-                        }
-                    }
-                }
-            }
-
-            OutlinedTextField(
-                value = editNotes,
-                onValueChange = { editNotes = it },
-                label = { Text("Notes / Style") },
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                OutlinedButton(
-                    onClick = onDismiss,
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(48.dp)
-                ) {
-                    Text("Cancel")
-                }
-                Button(
-                    onClick = {
-                        val name = editName.trim()
-                        if (name.isBlank()) {
-                            nameError = true
-                        } else {
-                            onConfirm(
-                                player.copy(
-                                    name = name,
-                                    nickname = editNickname.trim(),
-                                    skillLevel = editSkill,
-                                    notes = editNotes.trim(),
-                                    avatarColorIndex = editColorIndex
-                                )
-                            )
-                        }
-                    },
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier
-                        .weight(1.4f)
-                        .height(48.dp)
-                ) {
-                    Text("Update Profile", fontWeight = FontWeight.Bold)
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun PlayerDetailBottomSheet(
-    player: PlayerEntity,
-    onDismiss: () -> Unit,
-    onEdit: (PlayerEntity) -> Unit,
-    onDelete: (PlayerEntity) -> Unit
-) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        containerColor = MaterialTheme.colorScheme.surface
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxHeight(0.92f)
                 .padding(horizontal = 20.dp)
-                .padding(bottom = 32.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(bottom = 24.dp)
         ) {
+            // HERO HEADER
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                PlayerAvatar(name = player.name, avatarColorIndex = player.avatarColorIndex, size = 56.dp)
-                Spacer(modifier = Modifier.width(16.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = player.name,
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Black
-                        )
-                        if (player.nickname.isNotBlank()) {
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Surface(
-                                shape = RoundedCornerShape(6.dp),
-                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                            ) {
-                                Text(
-                                    text = player.nickname,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                )
-                            }
-                        }
-                    }
-                    Text(
-                        text = "Win Rate: ${"%.1f".format(player.winRate)}% (${player.matchesWon}W / ${player.matchesLost}L)",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = "Skill Level: ${player.skillLevel}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-
-                IconButton(onClick = { onEdit(player) }) {
-                    Icon(Icons.Default.Edit, contentDescription = "Edit Player")
-                }
-                IconButton(onClick = { onDelete(player) }) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete Player", tint = MaterialTheme.colorScheme.error)
-                }
-            }
-
-            if (player.notes.isNotBlank()) {
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            Icons.Default.Notes,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = player.notes,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-
-            // Performance Gauges
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
-                ),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Text("Performance Gauges", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-
-                    // Win Rate Bar
-                    Column {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("Match Win Rate", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text("${"%.1f".format(player.winRate)}%", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        LinearProgressIndicator(
-                            progress = { (player.winRate / 100f).coerceIn(0f, 1f) },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(8.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                        )
-                    }
-
-                    // Queen Conversion Bar
-                    Column {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("Queen Cover Success", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text("${player.queensCovered} covered", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = CarromQueenRed)
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        LinearProgressIndicator(
-                            progress = { (player.queenSuccessRate / 100f).coerceIn(0f, 1f) },
-                            color = CarromQueenRed,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(8.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                        )
-                    }
-                }
-            }
-
-            Text(
-                text = "Career Performance Statistics",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-
-            // Stats Grid
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    DetailStatBox("Matches", "${player.matchesPlayed}", Icons.Default.SportsEsports, Modifier.weight(1f))
-                    DetailStatBox("Boards Won", "${player.boardsWon}/${player.boardsPlayed}", Icons.Default.Dashboard, Modifier.weight(1f))
-                    DetailStatBox("Hands", "${player.handsPlayed}", Icons.Default.PanTool, Modifier.weight(1f))
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    DetailStatBox("White Coins", "${player.whitePocketed}", Icons.Default.Circle, Modifier.weight(1f))
-                    DetailStatBox("Black Coins", "${player.blackPocketed}", Icons.Default.Circle, Modifier.weight(1f))
-                    DetailStatBox("Total Coins", "${player.totalCoinsPocketed}", Icons.Default.Savings, Modifier.weight(1f))
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    DetailStatBox("Queens Covered", "${player.queensCovered}", Icons.Default.Stars, Modifier.weight(1f), isQueen = true)
-                    DetailStatBox("Queen Points", "+${player.queenPointsScored}", Icons.Default.AddCircle, Modifier.weight(1f))
-                    DetailStatBox("Penalties", "${player.penalties}", Icons.Default.Warning, Modifier.weight(1f))
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    DetailStatBox("Nill Wins", "${player.nillBoardWins}", Icons.Default.CheckCircle, Modifier.weight(1f))
-                    DetailStatBox("Nill Losses", "${player.nillBoardLosses}", Icons.Default.Cancel, Modifier.weight(1f))
-                    DetailStatBox("Total Points", "${player.totalPointsContributed}", Icons.Default.EmojiEvents, Modifier.weight(1f))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PlayerCard(
-    player: PlayerEntity,
-    onClick: () -> Unit
-) {
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        ),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .testTag("player_card_${player.id}")
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            PlayerAvatar(name = player.name, avatarColorIndex = player.avatarColorIndex, size = 44.dp)
-            Spacer(modifier = Modifier.width(14.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = player.name,
-                        fontWeight = FontWeight.Bold,
-                        style = MaterialTheme.typography.titleMedium
-                    )
-                    if (player.nickname.isNotBlank()) {
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = "(${player.nickname})",
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(2.dp))
-                Text(
-                    text = "${player.matchesPlayed} Matches • ${player.matchesWon}W / ${player.matchesLost}L (${"%.0f".format(player.winRate)}%) • ${player.skillLevel}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                if (player.queensCovered > 0) {
+                Box {
+                    PlayerAvatar(name = player.name, avatarColorIndex = player.avatarColorIndex, size = 56.dp)
                     Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = Color(0xFFFFEBEE)
+                        shape = CircleShape,
+                        color = levelInfo.tier.color,
+                        border = BorderStroke(2.dp, MaterialTheme.colorScheme.surface),
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(24.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            QueenCoinBadge(size = 14.dp, isCovered = true)
-                            Spacer(modifier = Modifier.width(4.dp))
+                        Box(contentAlignment = Alignment.Center) {
                             Text(
-                                text = "${player.queensCovered}",
+                                text = "${levelInfo.level}",
+                                color = Color.White,
                                 fontWeight = FontWeight.Bold,
-                                color = CarromQueenRed,
                                 fontSize = 11.sp
                             )
                         }
                     }
                 }
-                Icon(
-                    imageVector = Icons.Default.ChevronRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+
+                Spacer(modifier = Modifier.width(14.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = player.name,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = levelInfo.tier.color.copy(alpha = 0.2f)
+                        ) {
+                            Text(
+                                text = "Lvl ${levelInfo.level} • ${levelInfo.title}",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = levelInfo.tier.color,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+
+                        if (player.groupName.isNotBlank()) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant
+                            ) {
+                                Text(
+                                    text = player.groupName,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                IconButton(onClick = onEdit) {
+                    Icon(Icons.Default.Edit, contentDescription = "Edit Profile")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // TAB ROW
+            TabRow(
+                selectedTabIndex = selectedTab,
+                containerColor = Color.Transparent,
+                divider = { HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)) }
+            ) {
+                Tab(
+                    selected = selectedTab == 0,
+                    onClick = { selectedTab = 0 },
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.EmojiEvents, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Levels & Badges", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 )
+                Tab(
+                    selected = selectedTab == 1,
+                    onClick = { selectedTab = 1 },
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Analytics, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Performance", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                )
+                Tab(
+                    selected = selectedTab == 2,
+                    onClick = { selectedTab = 2 },
+                    text = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Badge, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Profile & Notes", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // TAB CONTENT
+            when (selectedTab) {
+                0 -> {
+                    // LEVELS & ACHIEVEMENTS TAB
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // COMPACT & MINIMAL HERO LEVEL CARD
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = levelInfo.tier.color.copy(alpha = 0.08f),
+                            border = BorderStroke(1.dp, levelInfo.tier.color.copy(alpha = 0.4f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(10.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = levelInfo.tier.color,
+                                            modifier = Modifier.size(26.dp)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Text(
+                                                    text = "${levelInfo.level}",
+                                                    color = Color.White,
+                                                    fontWeight = FontWeight.Bold,
+                                                    fontSize = 11.sp
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Column {
+                                            Text(
+                                                text = "Level ${levelInfo.level} • ${levelInfo.title}",
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 13.sp,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Text(
+                                                text = "${levelInfo.tier.title} Striker • ${levelInfo.xpIntoCurrentLevel}/${levelInfo.xpRequiredForNextLevel} XP",
+                                                fontSize = 10.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+
+                                    Surface(
+                                        shape = RoundedCornerShape(6.dp),
+                                        color = levelInfo.tier.color
+                                    ) {
+                                        Text(
+                                            text = "${levelInfo.totalXp} XP",
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 11.sp,
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                // XP Bar
+                                LinearProgressIndicator(
+                                    progress = { levelInfo.progressPercent },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(5.dp)
+                                        .clip(RoundedCornerShape(3.dp)),
+                                    color = levelInfo.tier.color,
+                                    trackColor = levelInfo.tier.color.copy(alpha = 0.2f)
+                                )
+
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                // XP Sources breakdown row (compact scroll)
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .horizontalScroll(rememberScrollState()),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    XpSourceChip("Matches (${player.matchesPlayed})", "+${levelInfo.matchesPlayedXp}")
+                                    XpSourceChip("Wins (${player.matchesWon})", "+${levelInfo.matchesWonXp}")
+                                    XpSourceChip("Coins (${player.totalCoinsPocketed})", "+${levelInfo.coinsPocketedXp}")
+                                    XpSourceChip("Queens (${player.queensCovered})", "+${levelInfo.queenCoveredXp}")
+                                    if (levelInfo.achievementBonusXp > 0) {
+                                        XpSourceChip("Badges (${levelInfo.unlockedAchievementsCount})", "+${levelInfo.achievementBonusXp}")
+                                    }
+                                }
+                            }
+                        }
+
+                        // ACHIEVEMENTS HEADER & CATEGORIES
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Milestone Achievements ($unlockedCount/${achievements.size} Unlocked)",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        // Category chips
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            AchievementCategory.values().forEach { cat ->
+                                val isSelected = selectedAchievementCategory == cat
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = { selectedAchievementCategory = cat },
+                                    label = { Text(cat.displayName, fontSize = 11.sp) },
+                                    shape = RoundedCornerShape(8.dp)
+                                )
+                            }
+                        }
+
+                        // List of achievements
+                        filteredAchievements.forEach { achievement ->
+                            AchievementItemCard(achievement = achievement)
+                        }
+                    }
+                }
+                1 -> {
+                    // PERFORMANCE & METRICS TAB (WITH TRAJECTORY LINE GRAPH)
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        // INTERACTIVE TRAJECTORY LINE GRAPH
+                        PlayerTrajectoryLineGraph(
+                            player = player,
+                            levelInfo = levelInfo
+                        )
+
+                        // MATCH PERFORMANCE SUMMARY
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                            ),
+                            border = CardDefaults.outlinedCardBorder(),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Text("Match Win/Loss Record", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    MetricBox("Played", "${player.matchesPlayed}")
+                                    MetricBox("Won", "${player.matchesWon}", Color(0xFF2E7D32))
+                                    MetricBox("Lost", "${player.matchesLost}", Color(0xFFC62828))
+                                    MetricBox("Win Rate", "${"%.1f".format(player.winRate)}%", MaterialTheme.colorScheme.primary)
+                                }
+                            }
+                        }
+
+                        // COINS / DOTS POCKETED
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                            ),
+                            border = CardDefaults.outlinedCardBorder(),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Text("Coins / Dots Pocketed", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    MetricBox("Total Coins", "${player.totalCoinsPocketed}")
+                                    MetricBox("White Coins", "${player.whitePocketed}")
+                                    MetricBox("Black Coins", "${player.blackPocketed}")
+                                    val whitePct = if (player.totalCoinsPocketed > 0) (player.whitePocketed.toFloat() / player.totalCoinsPocketed) * 100f else 0f
+                                    MetricBox("White Ratio", "${"%.0f".format(whitePct)}%")
+                                }
+                            }
+                        }
+
+                        // QUEEN STATS
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                            ),
+                            border = CardDefaults.outlinedCardBorder(),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    QueenCoinBadge(size = 18.dp, isCovered = true)
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Queen Mastery", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    MetricBox("Attempts", "${player.queenAttempts}")
+                                    MetricBox("Covered", "${player.queensCovered}", CarromQueenRed)
+                                    MetricBox("Success %", "${"%.1f".format(player.queenSuccessRate)}%")
+                                    MetricBox("Queen Pts", "${player.queenPointsScored}")
+                                }
+                            }
+                        }
+
+                        // ADVANCED METRICS
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                            ),
+                            border = CardDefaults.outlinedCardBorder(),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Text("Advanced Match Telemetry", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    MetricBox("Boards Won", "${player.boardsWon}/${player.boardsPlayed}")
+                                    MetricBox("Nill Wins", "${player.nillBoardWins}")
+                                    MetricBox("Penalties", "${player.penalties}")
+                                    MetricBox("Total Pts", "${player.totalPointsContributed}")
+                                }
+                            }
+                        }
+                    }
+                }
+                2 -> {
+                    // PROFILE & NOTES TAB
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
+                        ProfileInfoCard(label = "Registered Full Name", value = player.name)
+                        ProfileInfoCard(label = "Nickname / Title", value = player.nickname.ifBlank { "None assigned" })
+                        ProfileInfoCard(label = "Skill Level", value = player.skillLevel)
+
+                        // GROUP MEMBERSHIPS & REGULAR STATUS
+                        val affiliatedGroups = remember(player, groups) {
+                            val list = mutableListOf<GroupEntity>()
+                            groups.forEach { g ->
+                                if (g.hasMember(player.id) || g.name.equals(player.groupName, true)) {
+                                    if (list.none { it.id == g.id }) list.add(g)
+                                }
+                            }
+                            list
+                        }
+                        Card(
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                            ),
+                            border = CardDefaults.outlinedCardBorder(),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Groups,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Group Memberships & Match Regulars", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Players can belong to multiple groups or change groups on any match. They appear in regular player quick entry during match setup.",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
+                                if (affiliatedGroups.isEmpty()) {
+                                    Text(
+                                        text = "Currently in General pool. Add this player to groups in the Groups tab for 1-tap regular match selection.",
+                                        fontSize = 12.sp,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                } else {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .horizontalScroll(rememberScrollState()),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        affiliatedGroups.forEach { grp ->
+                                            Surface(
+                                                shape = RoundedCornerShape(8.dp),
+                                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.CheckCircle,
+                                                        contentDescription = null,
+                                                        tint = MaterialTheme.colorScheme.primary,
+                                                        modifier = Modifier.size(13.dp)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(5.dp))
+                                                    Text(
+                                                        text = grp.name,
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        val dateFormat = remember { SimpleDateFormat("MMMM d, yyyy", Locale.getDefault()) }
+                        ProfileInfoCard(label = "Player Since", value = dateFormat.format(Date(player.createdAt)))
+
+                        if (player.notes.isNotBlank()) {
+                            ProfileInfoCard(label = "Player Notes", value = player.notes)
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Button(
+                            onClick = onEdit,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Edit Profile & Group")
+                        }
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun DetailStatBox(
-    title: String,
-    value: String,
-    icon: ImageVector,
-    modifier: Modifier = Modifier,
-    isQueen: Boolean = false
-) {
-    Surface(
+private fun XpSourceChip(label: String, xp: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(text = xp, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
+        Text(text = label, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun MetricBox(label: String, value: String, valueColor: Color = Color.Unspecified) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = value,
+            fontWeight = FontWeight.Bold,
+            fontSize = 14.sp,
+            color = valueColor
+        )
+        Text(
+            text = label,
+            fontSize = 10.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+@Composable
+private fun ProfileInfoCard(label: String, value: String) {
+    Card(
         shape = RoundedCornerShape(12.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-        modifier = modifier
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+        ),
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Column(
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(text = label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(text = value, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        }
+    }
+}
+
+@Composable
+private fun AchievementItemCard(achievement: PlayerAchievement) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = if (achievement.isUnlocked) {
+            achievement.tier.color.copy(alpha = 0.08f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f)
+        },
+        border = BorderStroke(
+            width = 1.dp,
+            color = if (achievement.isUnlocked) achievement.tier.color.copy(alpha = 0.4f) else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = if (isQueen) CarromQueenRed else MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = value,
-                fontWeight = FontWeight.Black,
-                style = MaterialTheme.typography.titleMedium
-            )
-            Text(
-                text = title,
-                fontSize = 10.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
-            )
+            Surface(
+                shape = CircleShape,
+                color = if (achievement.isUnlocked) achievement.tier.color.copy(alpha = 0.2f) else MaterialTheme.colorScheme.surfaceVariant,
+                border = BorderStroke(1.dp, if (achievement.isUnlocked) achievement.tier.color else Color.Transparent),
+                modifier = Modifier.size(32.dp)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = if (achievement.isUnlocked) achievement.icon else Icons.Default.Lock,
+                        contentDescription = null,
+                        tint = if (achievement.isUnlocked) achievement.tier.color else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(10.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = achievement.title,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 12.sp,
+                        color = if (achievement.isUnlocked) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                    )
+
+                    Surface(
+                        shape = RoundedCornerShape(4.dp),
+                        color = if (achievement.isUnlocked) achievement.tier.color.copy(alpha = 0.15f) else MaterialTheme.colorScheme.surfaceVariant
+                    ) {
+                        Text(
+                            text = if (achievement.isUnlocked) "UNLOCKED" else "${achievement.currentProgress}/${achievement.target}",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = if (achievement.isUnlocked) achievement.tier.color else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
+                Text(
+                    text = achievement.description,
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                if (!achievement.isUnlocked) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    LinearProgressIndicator(
+                        progress = { achievement.progressPercent },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp)),
+                        color = achievement.tier.color,
+                        trackColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                }
+            }
         }
     }
 }

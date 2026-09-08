@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.carrom.data.local.CarromDatabase
+import com.example.carrom.data.local.entity.GroupEntity
 import com.example.carrom.data.local.entity.PlayerEntity
 import com.example.carrom.data.repository.CarromRepository
 import com.example.carrom.engine.*
@@ -22,6 +23,9 @@ class CarromViewModel(application: Application) : AndroidViewModel(application) 
     val allPlayers: StateFlow<List<PlayerEntity>> = repository.allPlayers
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val allGroups: StateFlow<List<GroupEntity>> = repository.allGroups
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     val activeSavedMatch: StateFlow<GameState?> = repository.activeMatchFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
@@ -31,12 +35,89 @@ class CarromViewModel(application: Application) : AndroidViewModel(application) 
     private var engine: CarromGameEngine? = null
 
     init {
-        // Automatically check if there is an active match
+        // Seed default groups if empty and check active match
         viewModelScope.launch {
+            repository.seedDefaultGroupsIfEmpty()
             val existing = repository.getActiveMatch()
             if (existing != null && !existing.isMatchOver) {
                 // Keep it ready for resume
             }
+        }
+    }
+
+    fun addNewPlayerWithGroup(
+        name: String,
+        avatarColorIndex: Int = 0,
+        nickname: String = "",
+        notes: String = "",
+        skillLevel: String = "Intermediate",
+        groupName: String = "General",
+        groupId: Long? = null
+    ) {
+        viewModelScope.launch {
+            val playerId = repository.insertPlayer(
+                name = name,
+                avatarColorIndex = avatarColorIndex,
+                nickname = nickname,
+                notes = notes,
+                skillLevel = skillLevel,
+                groupName = groupName
+            )
+            if (groupId != null && groupId > 0) {
+                val group = repository.getGroupById(groupId)
+                if (group != null) {
+                    repository.updateGroup(group.withPlayerAdded(playerId))
+                }
+            }
+        }
+    }
+
+    fun addNewGroup(name: String, description: String = "", colorIndex: Int = 0) {
+        viewModelScope.launch {
+            repository.insertGroup(name, description, colorIndex)
+        }
+    }
+
+    fun saveQuickGroup(
+        name: String,
+        team1Player1: String,
+        team1Player2: String,
+        team2Player1: String,
+        team2Player2: String,
+        team1Name: String = "Team 1",
+        team2Name: String = "Team 2",
+        isDoubles: Boolean = true,
+        colorIndex: Int = 0,
+        existingId: Long = 0L
+    ) {
+        viewModelScope.launch {
+            // Ensure all player records exist in DB for stats tracking without duplication
+            val names = listOf(team1Player1, team1Player2, team2Player1, team2Player2).filter { it.isNotBlank() }
+            val memberIds = mutableListOf<Long>()
+            for (pName in names) {
+                val p = repository.getOrCreatePlayer(name = pName, groupName = name)
+                memberIds.add(p.id)
+            }
+            val group = GroupEntity(
+                id = existingId,
+                name = name.trim(),
+                team1Name = team1Name.trim().ifBlank { "Team 1" },
+                team2Name = team2Name.trim().ifBlank { "Team 2" },
+                team1Player1 = team1Player1.trim(),
+                team1Player2 = team1Player2.trim(),
+                team2Player1 = team2Player1.trim(),
+                team2Player2 = team2Player2.trim(),
+                isDoubles = isDoubles,
+                colorIndex = colorIndex,
+                memberPlayerIds = memberIds.joinToString(",")
+            )
+            repository.saveGroup(group)
+        }
+    }
+
+    fun deleteGroup(id: Long) {
+        viewModelScope.launch {
+            repository.deleteGroupById(id)
         }
     }
 

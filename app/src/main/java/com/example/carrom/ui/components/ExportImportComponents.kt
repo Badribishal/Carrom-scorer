@@ -76,9 +76,25 @@ enum class ExportOptionType(
         icon = Icons.Default.Leaderboard,
         badge = "CSV"
     ),
+    JSON_SAVED_GROUPS(
+        title = "Saved Groups & Rosters (JSON)",
+        subtitle = "Export saved team setups, doubles lineups, and group rosters as JSON",
+        fileExtension = "json",
+        mimeType = "application/json",
+        icon = Icons.Default.Groups,
+        badge = "JSON"
+    ),
+    CSV_SAVED_GROUPS(
+        title = "Saved Groups & Rosters (CSV)",
+        subtitle = "Spreadsheet table of group names, descriptions, players & team lineups",
+        fileExtension = "csv",
+        mimeType = "text/csv",
+        icon = Icons.Default.TableChart,
+        badge = "CSV"
+    ),
     FULL_BACKUP_JSON(
         title = "Complete App Backup (JSON)",
-        subtitle = "Full portable snapshot to restore matches and players on any device or version",
+        subtitle = "Full portable snapshot including matches, players & saved groups",
         fileExtension = "json",
         mimeType = "application/json",
         icon = Icons.Default.CloudSync,
@@ -241,6 +257,8 @@ fun ExportDataBottomSheet(
                             ExportOptionType.CSV_MATCH_HISTORY -> exportViewModel.exportMatchesCsv(context, share = true) { _, _ -> onDismiss() }
                             ExportOptionType.CSV_BOARDS_BREAKDOWN -> exportViewModel.exportBoardsCsv(context, share = true) { _, _ -> onDismiss() }
                             ExportOptionType.CSV_PLAYER_STATS -> exportViewModel.exportPlayersCsv(context, share = true) { _, _ -> onDismiss() }
+                            ExportOptionType.JSON_SAVED_GROUPS -> exportViewModel.exportGroupsJson(context, share = true) { _, _ -> onDismiss() }
+                            ExportOptionType.CSV_SAVED_GROUPS -> exportViewModel.exportGroupsCsv(context, share = true) { _, _ -> onDismiss() }
                             ExportOptionType.FULL_BACKUP_JSON -> exportViewModel.exportFullBackup(context, share = true) { _, _ -> onDismiss() }
                         }
                     },
@@ -272,6 +290,20 @@ fun ExportDataBottomSheet(
                             }
                             ExportOptionType.CSV_PLAYER_STATS -> {
                                 exportViewModel.exportPlayersCsv(context, share = false) { file, content ->
+                                    pendingFileToSave = file
+                                    pendingContentToSave = content
+                                    saveDocumentLauncher.launch(file.name)
+                                }
+                            }
+                            ExportOptionType.JSON_SAVED_GROUPS -> {
+                                exportViewModel.exportGroupsJson(context, share = false) { file, content ->
+                                    pendingFileToSave = file
+                                    pendingContentToSave = content
+                                    saveDocumentLauncher.launch(file.name)
+                                }
+                            }
+                            ExportOptionType.CSV_SAVED_GROUPS -> {
+                                exportViewModel.exportGroupsCsv(context, share = false) { file, content ->
                                     pendingFileToSave = file
                                     pendingContentToSave = content
                                     saveDocumentLauncher.launch(file.name)
@@ -445,6 +477,8 @@ fun ImportPreviewDialog(
                                 ImportType.FULL_JSON_BACKUP -> Icons.Default.CloudSync
                                 ImportType.MATCHES_CSV -> Icons.Default.TableChart
                                 ImportType.PLAYERS_CSV -> Icons.Default.Leaderboard
+                                ImportType.GROUPS_JSON -> Icons.Default.Groups
+                                ImportType.GROUPS_CSV -> Icons.Default.TableChart
                                 ImportType.UNKNOWN -> Icons.Default.HelpOutline
                             },
                             contentDescription = null,
@@ -458,6 +492,8 @@ fun ImportPreviewDialog(
                                     ImportType.FULL_JSON_BACKUP -> "Carrom Full Backup (JSON)"
                                     ImportType.MATCHES_CSV -> "Matches History (CSV)"
                                     ImportType.PLAYERS_CSV -> "Players Statistics (CSV)"
+                                    ImportType.GROUPS_JSON -> "Saved Groups & Lineups (JSON)"
+                                    ImportType.GROUPS_CSV -> "Saved Groups & Lineups (CSV)"
                                     ImportType.UNKNOWN -> "Import File"
                                 },
                                 fontWeight = FontWeight.Bold,
@@ -473,45 +509,58 @@ fun ImportPreviewDialog(
                 }
 
                 // Stats breakdown cards
+                val statCards = remember(preview) {
+                    val list = mutableListOf<Triple<String, Int, ImageVector>>()
+                    if (preview.matches.isNotEmpty() || (preview.players.isNotEmpty() && preview.groups.isEmpty())) {
+                        list.add(Triple("Matches", preview.matches.size, Icons.Default.SportsEsports))
+                    }
+                    if (preview.players.isNotEmpty() || (preview.matches.isNotEmpty() && preview.groups.isEmpty())) {
+                        list.add(Triple("Players", preview.players.size, Icons.Default.Person))
+                    }
+                    if (preview.groups.isNotEmpty() || preview.importType == ImportType.GROUPS_JSON || preview.importType == ImportType.GROUPS_CSV) {
+                        list.add(Triple("Groups", preview.groups.size, Icons.Default.Groups))
+                    }
+                    if (list.isEmpty()) {
+                        list.add(Triple("Matches", preview.matches.size, Icons.Default.SportsEsports))
+                        list.add(Triple("Players", preview.players.size, Icons.Default.Person))
+                    }
+                    list
+                }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(10.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
+                    statCards.forEach { (label, count, icon) ->
+                        Surface(
+                            shape = RoundedCornerShape(10.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            modifier = Modifier.weight(1f)
                         ) {
-                            Text(text = "Matches Found", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(
-                                text = "${preview.matches.size}",
-                                fontWeight = FontWeight.Black,
-                                fontSize = 20.sp,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-
-                    Surface(
-                        shape = RoundedCornerShape(10.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(10.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(text = "Players Found", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            Text(
-                                text = "${preview.players.size}",
-                                fontWeight = FontWeight.Black,
-                                fontSize = 20.sp,
-                                color = MaterialTheme.colorScheme.primary
-                            )
+                            Column(
+                                modifier = Modifier.padding(vertical = 8.dp, horizontal = 4.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(
+                                    imageVector = icon,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Text(
+                                    text = "$count",
+                                    fontWeight = FontWeight.Black,
+                                    fontSize = 18.sp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = label,
+                                    fontSize = 10.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1
+                                )
+                            }
                         }
                     }
                 }

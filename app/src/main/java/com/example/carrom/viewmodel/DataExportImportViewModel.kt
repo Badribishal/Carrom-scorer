@@ -195,18 +195,25 @@ class DataExportImportViewModel(application: Application) : AndroidViewModel(app
             try {
                 val players = repository.getAllPlayersList()
                 val matches = repository.getAllMatchesList()
+                val groups = repository.getAllGroupsList()
 
                 val json = withContext(Dispatchers.Default) {
-                    CarromCsvExporter.exportFullBackupJson(players, matches)
+                    CarromCsvExporter.exportFullBackupJson(players, matches, groups)
                 }
                 val file = withContext(Dispatchers.IO) {
                     CarromExportManager.createTempJsonFile(context, json, "Carrom_Backup")
                 }
 
+                val summaryParts = mutableListOf<String>()
+                if (players.isNotEmpty()) summaryParts.add("${players.size} players")
+                if (matches.isNotEmpty()) summaryParts.add("${matches.size} matches")
+                if (groups.isNotEmpty()) summaryParts.add("${groups.size} groups")
+                val summaryStr = if (summaryParts.isEmpty()) "0 records" else summaryParts.joinToString(", ")
+
                 _uiState.value = _uiState.value.copy(
                     isExporting = false,
                     lastExportedFile = file,
-                    userMessage = "Full backup created (${players.size} players, ${matches.size} matches)."
+                    userMessage = "Full backup created ($summaryStr)."
                 )
 
                 if (share) {
@@ -217,6 +224,94 @@ class DataExportImportViewModel(application: Application) : AndroidViewModel(app
                 _uiState.value = _uiState.value.copy(
                     isExporting = false,
                     userMessage = "Backup failed: ${e.localizedMessage}",
+                    isError = true
+                )
+            }
+        }
+    }
+
+    /**
+     * Export saved groups, team lineups and rosters as JSON
+     */
+    fun exportGroupsJson(context: Context, share: Boolean = true, onFileReady: ((File, String) -> Unit)? = null) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isExporting = true)
+            try {
+                val groups = repository.getAllGroupsList()
+                if (groups.isEmpty()) {
+                    _uiState.value = _uiState.value.copy(
+                        isExporting = false,
+                        userMessage = "No saved groups found to export. Create a group first.",
+                        isError = true
+                    )
+                    return@launch
+                }
+
+                val json = withContext(Dispatchers.Default) {
+                    CarromCsvExporter.exportGroupsJson(groups)
+                }
+                val file = withContext(Dispatchers.IO) {
+                    CarromExportManager.createTempJsonFile(context, json, "Carrom_Saved_Groups")
+                }
+
+                _uiState.value = _uiState.value.copy(
+                    isExporting = false,
+                    lastExportedFile = file,
+                    userMessage = "Saved groups exported successfully (${groups.size} groups)."
+                )
+
+                if (share) {
+                    CarromExportManager.shareFile(context, file, "application/json", "Share Carrom Saved Groups JSON")
+                }
+                onFileReady?.invoke(file, json)
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isExporting = false,
+                    userMessage = "Groups export failed: ${e.localizedMessage}",
+                    isError = true
+                )
+            }
+        }
+    }
+
+    /**
+     * Export saved groups and team rosters as CSV table
+     */
+    fun exportGroupsCsv(context: Context, share: Boolean = true, onFileReady: ((File, String) -> Unit)? = null) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isExporting = true)
+            try {
+                val groups = repository.getAllGroupsList()
+                if (groups.isEmpty()) {
+                    _uiState.value = _uiState.value.copy(
+                        isExporting = false,
+                        userMessage = "No saved groups found to export. Create a group first.",
+                        isError = true
+                    )
+                    return@launch
+                }
+
+                val csv = withContext(Dispatchers.Default) {
+                    CarromCsvExporter.exportGroupsToCsv(groups)
+                }
+                val file = withContext(Dispatchers.IO) {
+                    CarromExportManager.createTempCsvFile(context, csv, "Carrom_Saved_Groups")
+                }
+
+                _uiState.value = _uiState.value.copy(
+                    isExporting = false,
+                    lastExportedFile = file,
+                    userMessage = "Saved groups exported successfully (${groups.size} groups)."
+                )
+
+                if (share) {
+                    CarromExportManager.shareFile(context, file, "text/csv", "Share Carrom Saved Groups CSV")
+                }
+                onFileReady?.invoke(file, csv)
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isExporting = false,
+                    userMessage = "Groups export failed: ${e.localizedMessage}",
                     isError = true
                 )
             }
@@ -325,10 +420,10 @@ class DataExportImportViewModel(application: Application) : AndroidViewModel(app
                     CarromCsvExporter.parseImportData(rawText)
                 }
 
-                if (parseResult.players.isEmpty() && parseResult.matches.isEmpty()) {
+                if (parseResult.players.isEmpty() && parseResult.matches.isEmpty() && parseResult.groups.isEmpty()) {
                     _uiState.value = _uiState.value.copy(
                         isImporting = false,
-                        userMessage = "No valid match or player data found in file. Supported: Carrom CSV exports or JSON backup files.",
+                        userMessage = "No valid match, player, or group data found in file. Supported: Carrom CSV exports or JSON backup files.",
                         isError = true
                     )
                     return@launch
@@ -351,7 +446,7 @@ class DataExportImportViewModel(application: Application) : AndroidViewModel(app
     /**
      * Confirms and persists the parsed import data
      */
-    fun executeImport(replaceAll: Boolean, onComplete: ((Int, Int) -> Unit)? = null) {
+    fun executeImport(replaceAll: Boolean, onComplete: ((Int, Int, Int) -> Unit)? = null) {
         val preview = _uiState.value.pendingImportPreview ?: return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isImporting = true)
@@ -359,15 +454,22 @@ class DataExportImportViewModel(application: Application) : AndroidViewModel(app
                 val result = repository.importFullBackup(
                     players = preview.players,
                     matches = preview.matches,
+                    groups = preview.groups,
                     replaceAll = replaceAll
                 )
+
+                val parts = mutableListOf<String>()
+                if (result.first > 0) parts.add("${result.first} player profiles")
+                if (result.second > 0) parts.add("${result.second} match records")
+                if (result.third > 0) parts.add("${result.third} saved groups")
+                val details = if (parts.isEmpty()) "records" else parts.joinToString(", ")
 
                 _uiState.value = _uiState.value.copy(
                     isImporting = false,
                     pendingImportPreview = null,
-                    userMessage = "Successfully imported ${result.first} player profiles and ${result.second} match records!"
+                    userMessage = "Successfully imported $details!"
                 )
-                onComplete?.invoke(result.first, result.second)
+                onComplete?.invoke(result.first, result.second, result.third)
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isImporting = false,

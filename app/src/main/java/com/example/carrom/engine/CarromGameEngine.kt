@@ -249,10 +249,10 @@ class CarromGameEngine(
             timestamp = System.currentTimeMillis()
         )
 
-        // 3. Advance rotation and hand
+        // 3. Advance rotation and hand (hand number increments on every turn until board completion)
         val order = _state.rotationOrder
         val nextRotationIndex = (currentTurn.currentTurnIndexInRotation + 1) % order.size
-        val nextHand = if (nextRotationIndex == 0) currentTurn.currentHand + 1 else currentTurn.currentHand
+        val nextHand = currentTurn.currentHand + 1
         val nextOverallTurn = currentTurn.currentOverallTurnNumber + 1
 
         val nextTurnState = TurnLiveState(

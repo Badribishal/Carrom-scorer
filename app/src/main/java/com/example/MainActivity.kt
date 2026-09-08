@@ -107,6 +107,7 @@ object Destinations {
     const val MATCH_COMPLETE = "match_complete"
     const val MATCH_HISTORY = "match_history"
     const val PLAYER_STATS = "player_stats"
+    const val GROUPS = "groups"
     const val SETTINGS = "settings"
 }
 
@@ -124,6 +125,7 @@ fun CarromAppNavigation(
     val liveGameState by carromViewModel.liveGameState.collectAsStateWithLifecycle()
     val activeSavedMatch by carromViewModel.activeSavedMatch.collectAsStateWithLifecycle()
     val allPlayers by carromViewModel.allPlayers.collectAsStateWithLifecycle()
+    val allGroups by carromViewModel.allGroups.collectAsStateWithLifecycle()
     val allMatches by historyViewModel.matches.collectAsStateWithLifecycle()
     val selectedMatchData by historyViewModel.selectedMatch.collectAsStateWithLifecycle()
 
@@ -231,7 +233,42 @@ fun CarromAppNavigation(
         composable(Destinations.MATCH_SETUP) {
             MatchSetupScreen(
                 savedPlayers = allPlayers,
+                savedGroups = allGroups,
                 onBack = { navController.popBackStack() },
+                onSaveGroup = { name, t1p1, t1p2, t2p1, t2p2, t1Name, t2Name, isDoubles, colorIndex, existingId ->
+                    carromViewModel.saveQuickGroup(
+                        name = name,
+                        team1Player1 = t1p1,
+                        team1Player2 = t1p2,
+                        team2Player1 = t2p1,
+                        team2Player2 = t2p2,
+                        team1Name = t1Name,
+                        team2Name = t2Name,
+                        isDoubles = isDoubles,
+                        colorIndex = colorIndex,
+                        existingId = existingId
+                    )
+                },
+                onDeleteGroup = { groupId ->
+                    carromViewModel.deleteGroup(groupId)
+                },
+                onAddNewPlayer = { name, colorIndex, nickname, notes, skillLevel, groupName, groupId ->
+                    carromViewModel.addNewPlayerWithGroup(
+                        name = name,
+                        avatarColorIndex = colorIndex,
+                        nickname = nickname,
+                        notes = notes,
+                        skillLevel = skillLevel,
+                        groupName = groupName,
+                        groupId = groupId
+                    )
+                },
+                onExportGroups = {
+                    showExportSheet = true
+                },
+                onImportGroups = {
+                    importFileLauncher.launch("*/*")
+                },
                 onStartMatch = { team1Name, team2Name, team1Players, team2Players, firstBreakerPlayerId, proMode, targetPoints, nillThreshold, queenPts, queenStopThreshold, enableQueenStopRule ->
                     carromViewModel.startNewMatch(
                         team1Name = team1Name,
@@ -412,15 +449,18 @@ fun CarromAppNavigation(
 
         // PLAYER STATS SCREEN
         composable(Destinations.PLAYER_STATS) {
+            val groups by playerStatsViewModel.groups.collectAsStateWithLifecycle()
             PlayerStatsScreen(
                 players = allPlayers,
-                onAddNewPlayer = { name, colorIndex, nickname, notes, skillLevel ->
+                groups = groups,
+                onAddNewPlayer = { name, colorIndex, nickname, notes, skillLevel, groupName ->
                     playerStatsViewModel.addPlayer(
                         name = name,
                         avatarColorIndex = colorIndex,
                         nickname = nickname,
                         notes = notes,
-                        skillLevel = skillLevel
+                        skillLevel = skillLevel,
+                        groupName = groupName
                     )
                 },
                 onUpdatePlayer = { player ->
@@ -429,8 +469,43 @@ fun CarromAppNavigation(
                 onDeletePlayer = { playerId ->
                     playerStatsViewModel.deletePlayer(playerId)
                 },
+                onAddGroup = { name, desc, colorIndex ->
+                    playerStatsViewModel.addGroup(name, desc, colorIndex)
+                },
                 onExportPlayers = {
                     exportViewModel.exportPlayersCsv(context, share = true)
+                },
+                onBack = { navController.popBackStack() }
+            )
+        }
+
+        // GROUPS SCREEN
+        composable(Destinations.GROUPS) {
+            val groups by playerStatsViewModel.groups.collectAsStateWithLifecycle()
+            GroupsScreen(
+                groups = groups,
+                players = allPlayers,
+                onAddGroup = { name, desc, colorIndex ->
+                    playerStatsViewModel.addGroup(name, desc, colorIndex)
+                },
+                onUpdateGroup = { group ->
+                    playerStatsViewModel.updateGroup(group)
+                },
+                onDeleteGroup = { groupId ->
+                    playerStatsViewModel.deleteGroup(groupId)
+                },
+                onAddNewPlayerWithGroup = { name, colorIndex, nickname, notes, skillLevel, groupName ->
+                    playerStatsViewModel.addPlayer(
+                        name = name,
+                        avatarColorIndex = colorIndex,
+                        nickname = nickname,
+                        notes = notes,
+                        skillLevel = skillLevel,
+                        groupName = groupName
+                    )
+                },
+                onNavigateToPlayerStats = { _ ->
+                    navController.navigate(Destinations.PLAYER_STATS)
                 },
                 onBack = { navController.popBackStack() }
             )

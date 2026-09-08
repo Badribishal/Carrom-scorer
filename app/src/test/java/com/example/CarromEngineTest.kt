@@ -73,7 +73,7 @@ class CarromEngineTest {
         engine.endTurn()
         assertEquals("Player 1", engine.state.currentPlayer.name)
         assertEquals("Player 2", engine.state.nextPlayer.name)
-        assertEquals(2, engine.state.turnState.currentHand)
+        assertEquals(5, engine.state.turnState.currentHand)
     }
 
     @Test
@@ -317,17 +317,15 @@ class CarromEngineTest {
     fun test15_completeAllPlayersTurns_handIncrementsBy1() {
         assertEquals(1, engine.state.turnState.currentHand)
 
-        // 4 players in rotation: P1 -> P2 -> P3 -> P4
+        // Hand number increments on each End Turn until board completion
         engine.endTurn() // Turn 1 (P1)
-        assertEquals(1, engine.state.turnState.currentHand)
-        engine.endTurn() // Turn 2 (P2)
-        assertEquals(1, engine.state.turnState.currentHand)
-        engine.endTurn() // Turn 3 (P3)
-        assertEquals(1, engine.state.turnState.currentHand)
-        engine.endTurn() // Turn 4 (P4)
-
-        // Now full rotation completed -> Hand 2 begins!
         assertEquals(2, engine.state.turnState.currentHand)
+        engine.endTurn() // Turn 2 (P2)
+        assertEquals(3, engine.state.turnState.currentHand)
+        engine.endTurn() // Turn 3 (P3)
+        assertEquals(4, engine.state.turnState.currentHand)
+        engine.endTurn() // Turn 4 (P4)
+        assertEquals(5, engine.state.turnState.currentHand)
     }
 
     @Test

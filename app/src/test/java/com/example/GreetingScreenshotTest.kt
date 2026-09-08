@@ -31,6 +31,7 @@ class GreetingScreenshotTest {
                     onPlayerStats = {},
                     onMatchHistory = {},
                     onSettings = {},
+                    onGroups = {},
                     onRules = {}
                 )
             }

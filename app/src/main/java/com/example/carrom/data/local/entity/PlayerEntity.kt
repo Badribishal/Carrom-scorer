@@ -12,6 +12,7 @@ data class PlayerEntity(
     val avatarColorIndex: Int = 0,
     val notes: String = "",
     val skillLevel: String = "Intermediate",
+    val groupName: String = "General",
     val matchesPlayed: Int = 0,
     val matchesWon: Int = 0,
     val matchesLost: Int = 0,

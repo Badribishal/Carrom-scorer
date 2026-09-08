@@ -1,6 +1,7 @@
 package com.example.carrom.export
 
 import com.example.carrom.data.local.CarromJsonParser
+import com.example.carrom.data.local.entity.GroupEntity
 import com.example.carrom.data.local.entity.MatchEntity
 import com.example.carrom.data.local.entity.PlayerEntity
 import com.example.carrom.engine.BoardRecord
@@ -83,13 +84,14 @@ object CarromCsvExporter {
      */
     fun exportPlayersToCsv(players: List<PlayerEntity>): String {
         val sb = StringBuilder()
-        sb.append("Player_ID,Name,Nickname,Skill_Level,Matches_Played,Matches_Won,Matches_Lost,Win_Rate_Percent,Boards_Played,Boards_Won,Total_Coins_Pocketed,White_Coins,Black_Coins,Queen_Attempts,Queens_Covered,Queen_Success_Rate_Percent,Queen_Points_Scored,Penalties,Nill_Board_Wins,Nill_Board_Losses,Total_Points_Contributed,Notes,Created_Date\n")
+        sb.append("Player_ID,Name,Nickname,Group,Skill_Level,Matches_Played,Matches_Won,Matches_Lost,Win_Rate_Percent,Boards_Played,Boards_Won,Total_Coins_Pocketed,White_Coins,Black_Coins,Queen_Attempts,Queens_Covered,Queen_Success_Rate_Percent,Queen_Points_Scored,Penalties,Nill_Board_Wins,Nill_Board_Losses,Total_Points_Contributed,Notes,Created_Date\n")
 
         for (p in players) {
             val dateStr = dateFormat.format(Date(p.createdAt))
             sb.append(p.id).append(",")
             sb.append(escapeCsv(p.name)).append(",")
             sb.append(escapeCsv(p.nickname)).append(",")
+            sb.append(escapeCsv(p.groupName)).append(",")
             sb.append(escapeCsv(p.skillLevel)).append(",")
             sb.append(p.matchesPlayed).append(",")
             sb.append(p.matchesWon).append(",")
@@ -116,9 +118,13 @@ object CarromCsvExporter {
     }
 
     /**
-     * Exports full portable backup JSON including players and matches
+     * Exports full portable backup JSON including players, matches, and saved groups
      */
-    fun exportFullBackupJson(players: List<PlayerEntity>, matches: List<MatchEntity>): String {
+    fun exportFullBackupJson(
+        players: List<PlayerEntity>,
+        matches: List<MatchEntity>,
+        groups: List<GroupEntity> = emptyList()
+    ): String {
         val root = JSONObject()
         root.put("version", 1)
         root.put("appName", "CarromScoreKeeper")
@@ -130,6 +136,7 @@ object CarromCsvExporter {
             pObj.put("id", p.id)
             pObj.put("name", p.name)
             pObj.put("nickname", p.nickname)
+            pObj.put("groupName", p.groupName)
             pObj.put("avatarColorIndex", p.avatarColorIndex)
             pObj.put("notes", p.notes)
             pObj.put("skillLevel", p.skillLevel)
@@ -181,34 +188,163 @@ object CarromCsvExporter {
         }
         root.put("matches", matchesArray)
 
+        val groupsArray = JSONArray()
+        for (g in groups) {
+            val gObj = JSONObject()
+            gObj.put("id", g.id)
+            gObj.put("name", g.name)
+            gObj.put("description", g.description)
+            gObj.put("colorIndex", g.colorIndex)
+            gObj.put("memberPlayerIds", g.memberPlayerIds)
+            gObj.put("team1Name", g.team1Name)
+            gObj.put("team2Name", g.team2Name)
+            gObj.put("team1Player1", g.team1Player1)
+            gObj.put("team1Player2", g.team1Player2)
+            gObj.put("team2Player1", g.team2Player1)
+            gObj.put("team2Player2", g.team2Player2)
+            gObj.put("isDoubles", g.isDoubles)
+            gObj.put("createdAt", g.createdAt)
+            groupsArray.put(gObj)
+        }
+        root.put("groups", groupsArray)
+
         return root.toString(2)
     }
 
     /**
-     * Parses an imported CSV file or JSON string, extracting parsed players and matches
+     * Exports saved groups and team lineups as standalone JSON
+     */
+    fun exportGroupsJson(groups: List<GroupEntity>): String {
+        val root = JSONObject()
+        root.put("version", 1)
+        root.put("appName", "CarromScoreKeeper")
+        root.put("type", "groups_backup")
+        root.put("exportedAt", System.currentTimeMillis())
+
+        val groupsArray = JSONArray()
+        for (g in groups) {
+            val gObj = JSONObject()
+            gObj.put("id", g.id)
+            gObj.put("name", g.name)
+            gObj.put("description", g.description)
+            gObj.put("colorIndex", g.colorIndex)
+            gObj.put("memberPlayerIds", g.memberPlayerIds)
+            gObj.put("team1Name", g.team1Name)
+            gObj.put("team2Name", g.team2Name)
+            gObj.put("team1Player1", g.team1Player1)
+            gObj.put("team1Player2", g.team1Player2)
+            gObj.put("team2Player1", g.team2Player1)
+            gObj.put("team2Player2", g.team2Player2)
+            gObj.put("isDoubles", g.isDoubles)
+            gObj.put("createdAt", g.createdAt)
+            groupsArray.put(gObj)
+        }
+        root.put("groups", groupsArray)
+
+        return root.toString(2)
+    }
+
+    /**
+     * Exports saved groups as CSV table
+     */
+    fun exportGroupsToCsv(groups: List<GroupEntity>): String {
+        val sb = StringBuilder()
+        sb.append("Group_ID,Group_Name,Description,Color_Index,Format,Team_1_Name,Team_1_Player_1,Team_1_Player_2,Team_2_Name,Team_2_Player_1,Team_2_Player_2,Member_Player_IDs,Created_Date\n")
+
+        for (g in groups) {
+            val dateStr = dateFormat.format(Date(g.createdAt))
+            sb.append(g.id).append(",")
+            sb.append(escapeCsv(g.name)).append(",")
+            sb.append(escapeCsv(g.description)).append(",")
+            sb.append(g.colorIndex).append(",")
+            sb.append(if (g.isDoubles) "Doubles" else "Singles").append(",")
+            sb.append(escapeCsv(g.team1Name)).append(",")
+            sb.append(escapeCsv(g.team1Player1)).append(",")
+            sb.append(escapeCsv(g.team1Player2)).append(",")
+            sb.append(escapeCsv(g.team2Name)).append(",")
+            sb.append(escapeCsv(g.team2Player1)).append(",")
+            sb.append(escapeCsv(g.team2Player2)).append(",")
+            sb.append(escapeCsv(g.memberPlayerIds)).append(",")
+            sb.append(escapeCsv(dateStr)).append("\n")
+        }
+
+        return sb.toString()
+    }
+
+    /**
+     * Parses an imported CSV file or JSON string, extracting parsed players, matches, and groups
      */
     fun parseImportData(rawContent: String): ParsedImportResult {
         val trimmed = rawContent.trim()
         if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
             return parseJsonBackup(trimmed)
         }
+        if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+            return parseJsonArrayBackup(trimmed)
+        }
 
         // CSV parsing
         val lines = splitCsvLines(trimmed)
         if (lines.isEmpty()) {
-            return ParsedImportResult(emptyList(), emptyList(), "Empty file", ImportType.UNKNOWN)
+            return ParsedImportResult(emptyList(), emptyList(), emptyList(), "Empty file", ImportType.UNKNOWN)
         }
 
         val headerLine = lines.first()
         val headers = parseCsvRow(headerLine).map { it.trim().lowercase(Locale.ROOT) }
 
-        if (headers.any { it.contains("match_id") || it.contains("team_1_name") || it.contains("team1name") }) {
+        if (headers.any { it == "group_name" || it == "group_id" || it == "member_player_ids" || it == "team_1_player_1" || it.contains("group_name") }) {
+            return parseGroupsCsv(lines)
+        } else if (headers.any { it.contains("match_id") || it.contains("team_1_players") || it.contains("winner_team") || it.contains("team1name") }) {
             return parseMatchesCsv(lines)
-        } else if (headers.any { it.contains("skill_level") || it.contains("matches_played") || it.contains("matchesplayed") || it.contains("white_coins") }) {
+        } else if (headers.any { it.contains("skill_level") || it.contains("white_coins") || it.contains("matches_played") }) {
             return parsePlayersCsv(lines)
         }
 
-        return ParsedImportResult(emptyList(), emptyList(), "Unrecognized CSV format", ImportType.UNKNOWN)
+        return ParsedImportResult(emptyList(), emptyList(), emptyList(), "Unrecognized CSV format", ImportType.UNKNOWN)
+    }
+
+    private fun parseJsonArrayBackup(jsonArrayStr: String): ParsedImportResult {
+        try {
+            val arr = JSONArray(jsonArrayStr)
+            if (arr.length() == 0) {
+                return ParsedImportResult(emptyList(), emptyList(), emptyList(), "Empty JSON array", ImportType.UNKNOWN)
+            }
+            val first = arr.getJSONObject(0)
+            if (first.has("memberPlayerIds") || first.has("team1Player1") || (first.has("name") && first.has("isDoubles"))) {
+                val parsedGroups = mutableListOf<GroupEntity>()
+                for (i in 0 until arr.length()) {
+                    parsedGroups.add(parseGroupFromJson(arr.getJSONObject(i)))
+                }
+                return ParsedImportResult(
+                    players = emptyList(),
+                    matches = emptyList(),
+                    groups = parsedGroups,
+                    summary = "Found ${parsedGroups.size} saved groups in JSON array",
+                    importType = ImportType.GROUPS_JSON
+                )
+            }
+            return ParsedImportResult(emptyList(), emptyList(), emptyList(), "Unrecognized JSON array format", ImportType.UNKNOWN)
+        } catch (e: Exception) {
+            return ParsedImportResult(emptyList(), emptyList(), emptyList(), "Error parsing JSON array: ${e.message}", ImportType.UNKNOWN)
+        }
+    }
+
+    private fun parseGroupFromJson(g: JSONObject): GroupEntity {
+        return GroupEntity(
+            id = g.optLong("id", 0L),
+            name = g.getString("name"),
+            description = g.optString("description", ""),
+            colorIndex = g.optInt("colorIndex", 0),
+            memberPlayerIds = g.optString("memberPlayerIds", ""),
+            team1Name = g.optString("team1Name", "Team 1"),
+            team2Name = g.optString("team2Name", "Team 2"),
+            team1Player1 = g.optString("team1Player1", ""),
+            team1Player2 = g.optString("team1Player2", ""),
+            team2Player1 = g.optString("team2Player1", ""),
+            team2Player2 = g.optString("team2Player2", ""),
+            isDoubles = g.optBoolean("isDoubles", true),
+            createdAt = g.optLong("createdAt", System.currentTimeMillis())
+        )
     }
 
     private fun parseJsonBackup(jsonStr: String): ParsedImportResult {
@@ -225,6 +361,7 @@ object CarromCsvExporter {
                         id = p.optLong("id", 0L),
                         name = p.getString("name"),
                         nickname = p.optString("nickname", ""),
+                        groupName = p.optString("groupName", "General"),
                         avatarColorIndex = p.optInt("avatarColorIndex", 0),
                         notes = p.optString("notes", ""),
                         skillLevel = p.optString("skillLevel", "Intermediate"),
@@ -278,14 +415,36 @@ object CarromCsvExporter {
                 )
             }
 
+            val gArr = root.optJSONArray("groups") ?: JSONArray()
+            val parsedGroups = mutableListOf<GroupEntity>()
+            for (i in 0 until gArr.length()) {
+                parsedGroups.add(parseGroupFromJson(gArr.getJSONObject(i)))
+            }
+
+            val isOnlyGroups = parsedGroups.isNotEmpty() && parsedPlayers.isEmpty() && parsedMatches.isEmpty()
+            val isExplicitGroupsType = root.optString("type") == "groups_backup"
+
+            val importType = if (isOnlyGroups || isExplicitGroupsType) {
+                ImportType.GROUPS_JSON
+            } else {
+                ImportType.FULL_JSON_BACKUP
+            }
+
+            val summary = when {
+                isOnlyGroups || isExplicitGroupsType -> "Found ${parsedGroups.size} saved groups in JSON file"
+                parsedGroups.isNotEmpty() -> "Found ${parsedPlayers.size} players, ${parsedMatches.size} matches, and ${parsedGroups.size} groups in JSON backup"
+                else -> "Found ${parsedPlayers.size} players and ${parsedMatches.size} matches in JSON backup"
+            }
+
             return ParsedImportResult(
                 players = parsedPlayers,
                 matches = parsedMatches,
-                summary = "Found ${parsedPlayers.size} players and ${parsedMatches.size} matches in JSON backup",
-                importType = ImportType.FULL_JSON_BACKUP
+                groups = parsedGroups,
+                summary = summary,
+                importType = importType
             )
         } catch (e: Exception) {
-            return ParsedImportResult(emptyList(), emptyList(), "Error parsing JSON backup: ${e.message}", ImportType.UNKNOWN)
+            return ParsedImportResult(emptyList(), emptyList(), emptyList(), "Error parsing JSON backup: ${e.message}", ImportType.UNKNOWN)
         }
     }
 
@@ -376,11 +535,12 @@ object CarromCsvExporter {
             return ParsedImportResult(
                 players = playersMap.values.toList(),
                 matches = matches,
+                groups = emptyList(),
                 summary = "Found ${matches.size} matches and ${playersMap.size} unique players from CSV",
                 importType = ImportType.MATCHES_CSV
             )
         } catch (e: Exception) {
-            return ParsedImportResult(emptyList(), emptyList(), "Error parsing matches CSV: ${e.message}", ImportType.UNKNOWN)
+            return ParsedImportResult(emptyList(), emptyList(), emptyList(), "Error parsing matches CSV: ${e.message}", ImportType.UNKNOWN)
         }
     }
 
@@ -398,6 +558,7 @@ object CarromCsvExporter {
                 if (name.isBlank()) continue
 
                 val nickname = getCol(row, colMap, "nickname") ?: ""
+                val group = getCol(row, colMap, "group") ?: getCol(row, colMap, "group_name") ?: "General"
                 val skill = getCol(row, colMap, "skill_level") ?: "Intermediate"
                 val matchesPlayed = getCol(row, colMap, "matches_played")?.toIntOrNull() ?: 0
                 val matchesWon = getCol(row, colMap, "matches_won")?.toIntOrNull() ?: 0
@@ -419,6 +580,7 @@ object CarromCsvExporter {
                     PlayerEntity(
                         name = name,
                         nickname = nickname,
+                        groupName = group,
                         skillLevel = skill,
                         matchesPlayed = matchesPlayed,
                         matchesWon = matchesWon,
@@ -442,11 +604,70 @@ object CarromCsvExporter {
             return ParsedImportResult(
                 players = players,
                 matches = emptyList(),
+                groups = emptyList(),
                 summary = "Found ${players.size} player performance profiles from CSV",
                 importType = ImportType.PLAYERS_CSV
             )
         } catch (e: Exception) {
-            return ParsedImportResult(emptyList(), emptyList(), "Error parsing players CSV: ${e.message}", ImportType.UNKNOWN)
+            return ParsedImportResult(emptyList(), emptyList(), emptyList(), "Error parsing players CSV: ${e.message}", ImportType.UNKNOWN)
+        }
+    }
+
+    private fun parseGroupsCsv(lines: List<String>): ParsedImportResult {
+        try {
+            val groups = mutableListOf<GroupEntity>()
+            val headerRow = parseCsvRow(lines[0]).map { it.trim().lowercase(Locale.ROOT) }
+            val colMap = headerRow.mapIndexed { idx, name -> name to idx }.toMap()
+
+            for (i in 1 until lines.size) {
+                val row = parseCsvRow(lines[i])
+                if (row.isEmpty() || row.all { it.isBlank() }) continue
+
+                val name = getCol(row, colMap, "group_name")
+                    ?: getCol(row, colMap, "name")
+                    ?: continue
+                if (name.isBlank()) continue
+
+                val id = getCol(row, colMap, "group_id")?.toLongOrNull() ?: 0L
+                val desc = getCol(row, colMap, "description") ?: ""
+                val colorIdx = getCol(row, colMap, "color_index")?.toIntOrNull() ?: 0
+                val format = getCol(row, colMap, "format") ?: "Doubles"
+                val isDoubles = !format.equals("Singles", ignoreCase = true)
+                val t1Name = getCol(row, colMap, "team_1_name") ?: "Team 1"
+                val t1P1 = getCol(row, colMap, "team_1_player_1") ?: ""
+                val t1P2 = getCol(row, colMap, "team_1_player_2") ?: ""
+                val t2Name = getCol(row, colMap, "team_2_name") ?: "Team 2"
+                val t2P1 = getCol(row, colMap, "team_2_player_1") ?: ""
+                val t2P2 = getCol(row, colMap, "team_2_player_2") ?: ""
+                val memberIds = getCol(row, colMap, "member_player_ids") ?: ""
+
+                groups.add(
+                    GroupEntity(
+                        id = id,
+                        name = name,
+                        description = desc,
+                        colorIndex = colorIdx,
+                        memberPlayerIds = memberIds,
+                        team1Name = t1Name,
+                        team2Name = t2Name,
+                        team1Player1 = t1P1,
+                        team1Player2 = t1P2,
+                        team2Player1 = t2P1,
+                        team2Player2 = t2P2,
+                        isDoubles = isDoubles
+                    )
+                )
+            }
+
+            return ParsedImportResult(
+                players = emptyList(),
+                matches = emptyList(),
+                groups = groups,
+                summary = "Found ${groups.size} saved groups from CSV",
+                importType = ImportType.GROUPS_CSV
+            )
+        } catch (e: Exception) {
+            return ParsedImportResult(emptyList(), emptyList(), emptyList(), "Error parsing groups CSV: ${e.message}", ImportType.UNKNOWN)
         }
     }
 
@@ -517,12 +738,15 @@ enum class ImportType {
     FULL_JSON_BACKUP,
     MATCHES_CSV,
     PLAYERS_CSV,
+    GROUPS_JSON,
+    GROUPS_CSV,
     UNKNOWN
 }
 
 data class ParsedImportResult(
     val players: List<PlayerEntity>,
     val matches: List<MatchEntity>,
+    val groups: List<GroupEntity> = emptyList(),
     val summary: String,
     val importType: ImportType
 )

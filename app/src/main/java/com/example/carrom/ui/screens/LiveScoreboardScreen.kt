@@ -102,7 +102,7 @@ fun LiveScoreboardScreen(
                             color = MaterialTheme.colorScheme.primaryContainer
                         ) {
                             Text(
-                                text = "B${board.boardNumber} • H${turn.currentHand}",
+                                text = "B${board.boardNumber} • Hand ${turn.currentHand}",
                                 fontWeight = FontWeight.Black,
                                 fontSize = 13.sp,
                                 color = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -307,7 +307,7 @@ fun LiveScoreboardScreen(
                                 CarromCoinBadge(color = currentTeamColor, size = 10.dp)
                             }
                             Text(
-                                text = "$currentTeamName • Turn #${turn.currentOverallTurnNumber}",
+                                text = "$currentTeamName • Hand #${turn.currentHand}",
                                 fontSize = 10.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -687,7 +687,7 @@ fun LiveScoreboardScreen(
                                 horizontalArrangement = Arrangement.Center
                             ) {
                                 Text(
-                                    text = "Next Turn",
+                                    text = "End Turn",
                                     fontWeight = FontWeight.Black,
                                     fontSize = 16.sp,
                                     letterSpacing = 0.3.sp

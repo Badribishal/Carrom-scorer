@@ -38,7 +38,8 @@ fun HomeScreen(
     onPlayerStats: () -> Unit,
     onMatchHistory: () -> Unit,
     onSettings: () -> Unit,
-    onRules: () -> Unit
+    onGroups: () -> Unit = {},
+    onRules: () -> Unit = {}
 ) {
     Scaffold(
         topBar = {
@@ -272,15 +273,6 @@ fun HomeScreen(
                     modifier = Modifier
                         .weight(1f)
                         .testTag("home_player_stats_card")
-                )
-                QuickNavCard(
-                    title = "Rules",
-                    subtitle = "Official Guide",
-                    icon = Icons.Default.MenuBook,
-                    onClick = onRules,
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("home_rules_card")
                 )
             }
 
